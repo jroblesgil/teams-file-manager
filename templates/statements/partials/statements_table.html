@@ -1,0 +1,135 @@
+<div class="table-container">
+    <table class="table statements-table">
+        <thead>
+            <tr>
+                <th class="account-name-cell">Account</th>
+                {% for month in ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] %}
+                <th class="month-header">{{ month }}</th>
+                {% endfor %}
+                <th class="month-header">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for account_id, account_data in statements_data.items() %}
+            <tr class="account-row" data-account-id="{{ account_id }}" data-account-type="{{ account_data.type }}">
+                <td class="account-name-cell">
+                    <div class="fw-semibold">{{ account_data.name[:20] }}</div>
+                    <div class="small text-muted">{{ account_data.identifier[-4:] }}</div>
+                    <div>
+                        <span class="badge account-badge bg-{{ 'success' if account_data.type == 'stp' else 'info' }}">
+                            {{ account_data.type.upper() }}
+                        </span>
+                        <span class="text-muted small">{{ account_data.currency }}</span>
+                    </div>
+                    {% if account_data.get('total_transactions', 0) > 0 %}
+                    <div class="small text-success">
+                        <i class="fas fa-database me-1"></i>{{ account_data.total_transactions|default(0) }} txns
+                    </div>
+                    {% endif %}
+                </td>
+
+                {% for month in range(1, 13) %}
+                {% set month_key = year|string ~ '-' ~ '%02d'|format(month) %}
+                {% set months_dict = account_data.get('months', {}) %}
+                {% set month_data = months_dict.get(month_key, {}) if months_dict else {} %}
+                {% set has_files = month_data and month_data.get('has_files') %}
+                
+                <td class="month-cell {{ 'no-file' if not has_files else '' }}"
+                    data-account-id="{{ account_id }}" 
+                    data-month="{{ month }}"
+                    {% if has_files %}
+                    onclick="downloadMonthFile('{{ account_id }}', {{ month }})"
+                    style="cursor: pointer;"
+                    title="Click to download {{ month_data.get('month_name', 'file') }}"
+                    {% else %}
+                    style="cursor: default;"
+                    title="No files available"
+                    {% endif %}>
+                    
+                    <!-- File Icons with proper ID -->
+                    <div class="file-icon" id="file-icon-{{ account_id }}-{{ month }}">
+                        {% if month_data and month_data.get('xlsx') %}
+                        <i class="fas fa-file-excel text-success me-1" title="Excel file available"></i>
+                        {% endif %}
+                        {% if month_data and month_data.get('pdf') %}
+                        <i class="fas fa-file-pdf text-danger" title="PDF file available"></i>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Database Status -->
+                    <div class="database-line">
+                        <span class="database-icon db-{{ 'parsed' if (month_data and month_data.get('status') == 'complete' and month_data.get('pdf', {}).get('transaction_count', 0) > 0) else ('loaded' if has_files else 'not-loaded') }}" id="db-icon-{{ account_id }}-{{ month }}">
+                            <i class="fas fa-database"></i>
+                        </span>
+                        <span class="transaction-count" id="count-{{ account_id }}-{{ month }}">
+                            {% if month_data %}
+                                {% set pdf_count = month_data.get('pdf', {}).get('transaction_count', 0) if month_data.get('pdf') else 0 %}
+                                {% set xlsx_count = month_data.get('xlsx', {}).get('transaction_count', 0) if month_data.get('xlsx') else 0 %}
+                                {% set txn_count = pdf_count + xlsx_count %}
+                                {% if txn_count > 0 %}
+                                    {% if txn_count < 1000 %}{{ txn_count }}
+                                    {% elif txn_count < 1000000 %}{{ "%.1f"|format(txn_count/1000) }}k
+                                    {% else %}{{ "%.1f"|format(txn_count/1000000) }}M
+                                    {% endif %}
+                                {% else %}-
+                                {% endif %}
+                            {% else %}-
+                            {% endif %}
+                        </span>
+                    </div>
+                </td>
+                {% endfor %}
+
+                <!-- Actions Column -->
+                <td class="actions-column">
+                    <div class="d-flex gap-1 justify-content-center">
+                        <!-- Refresh Button -->
+                        <button onclick="refreshAccountInventory('{{ account_id }}')" 
+                                class="btn btn-primary btn-sm" 
+                                id="load-btn-{{ account_id }}"
+                                title="Refresh account data">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                        
+                        <!-- Parse Button -->
+                        <button onclick="parseAccountRow('{{ account_id }}')"
+                                class="btn btn-warning btn-sm" 
+                                id="parse-btn-{{ account_id }}"
+                                title="Parse account files"
+                                {{ 'style="display: none;"' if account_data.get('total_files', 0) == 0 else '' }}>
+                            <i class="fas fa-cogs"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Status Summary -->
+<div class="mt-3 p-3 bg-light rounded">
+    <div class="row text-center">
+        <div class="col-md-3">
+            <div class="h5 mb-1 text-primary">{{ summary.total_accounts }}</div>
+            <div class="small text-muted">Total Accounts</div>
+        </div>
+        <div class="col-md-3">
+            <div class="h5 mb-1 text-success">{{ summary.total_files }}</div>
+            <div class="small text-muted">Total Files</div>
+        </div>
+        <div class="col-md-3">
+            <div class="h5 mb-1 text-info">{{ summary.accounts_with_data }}</div>
+            <div class="small text-muted">Accounts with Data</div>
+        </div>
+        <div class="col-md-3">
+            <div class="h5 mb-1 text-warning">
+                {% if summary.total_transactions < 1000 %}{{ summary.total_transactions }}
+                {% elif summary.total_transactions < 1000000 %}{{ "%.1f"|format(summary.total_transactions/1000) }}k
+                {% else %}{{ "%.1f"|format(summary.total_transactions/1000000) }}M
+                {% endif %}
+            </div>
+            <div class="small text-muted">Total Transactions</div>
+        </div>
+    </div>
+</div>

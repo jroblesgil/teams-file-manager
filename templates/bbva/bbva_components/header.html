@@ -1,0 +1,155 @@
+<!-- BBVA Banks Parse Header Component -->
+<div class="page-header banks-header">
+    <div class="row align-items-center">
+        <div class="col-md-6">
+            <div class="header-title">
+                <h1 class="page-title">
+                    <i class="fas fa-university"></i>
+                    Banks Parse
+                </h1>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Banks Parse</li>
+                    </ol>
+                </nav>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="header-actions">
+                <!-- Upload Button -->
+                <button class="btn btn-primary upload-main-btn" 
+                        onclick="openUploadModal()">
+                    <i class="fas fa-upload"></i>
+                    Upload PDFs
+                </button>
+                
+                <!-- Year Navigation -->
+                <div class="year-navigation">
+                    <button class="btn btn-outline-secondary year-prev" 
+                            onclick="changeYear(-1)">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <span class="current-year">{{ current_year or 2025 }}</span>
+                    <button class="btn btn-outline-secondary year-next" 
+                            onclick="changeYear(1)">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+                
+                <!-- Settings Dropdown -->
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary dropdown-toggle" 
+                            type="button" id="settingsDropdown" 
+                            data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                    <ul class="dropdown-menu" aria-labelledby="settingsDropdown">
+                        <li><a class="dropdown-item" href="#" onclick="exportAllAccounts()">
+                            <i class="fas fa-download"></i> Export All Accounts
+                        </a></li>
+                        <li><a class="dropdown-item" href="#" onclick="parseAllAccounts()">
+                            <i class="fas fa-play"></i> Parse All Accounts
+                        </a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="#" onclick="showSystemInfo()">
+                            <i class="fas fa-info-circle"></i> System Information
+                        </a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.banks-header {
+    background: linear-gradient(135deg, #004481, #1464A0);
+    color: white;
+    padding: 2rem 0;
+    margin-bottom: 2rem;
+    border-radius: 0.5rem;
+}
+
+.banks-header .page-title {
+    color: white;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+
+.banks-header .breadcrumb {
+    background: transparent;
+    margin-bottom: 0;
+    padding: 0;
+}
+
+.banks-header .breadcrumb-item a {
+    color: rgba(255, 255, 255, 0.8);
+    text-decoration: none;
+}
+
+.banks-header .breadcrumb-item.active {
+    color: white;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    justify-content: flex-end;
+}
+
+.year-navigation {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 0.5rem;
+    border-radius: 0.5rem;
+}
+
+.current-year {
+    font-weight: 600;
+    font-size: 1.1rem;
+    min-width: 4rem;
+    text-align: center;
+}
+
+.year-prev, .year-next {
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    background: transparent;
+}
+
+.year-prev:hover, .year-next:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.5);
+    color: white;
+}
+
+.upload-main-btn {
+    background: #2DCCCD;
+    border-color: #2DCCCD;
+    color: #004481;
+    font-weight: 600;
+}
+
+.upload-main-btn:hover {
+    background: #25b3b4;
+    border-color: #25b3b4;
+    color: #004481;
+}
+
+@media (max-width: 768px) {
+    .header-actions {
+        flex-direction: column;
+        gap: 0.5rem;
+        margin-top: 1rem;
+    }
+    
+    .year-navigation {
+        order: -1;
+    }
+}
+</style>

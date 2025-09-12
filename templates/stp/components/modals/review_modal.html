@@ -1,0 +1,78 @@
+<!-- templates/stp_components/modals/review_modal.html -->
+<div class="modal fade" id="reviewModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-list"></i>
+                    Transaction Review - <span id="reviewAccountTitle"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Timeline Selector -->
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Time Period</label>
+                        <select class="form-select" id="reviewTimelineSelect" onchange="updateReviewData()">
+                            <option value="all">All Transactions</option>
+                            <option value="current_year">Current Year</option>
+                            <option value="last_12_months">Last 12 Months</option>
+                            <option value="custom">Custom Date Range</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6" id="customDateRange" style="display: none;">
+                        <div class="row">
+                            <div class="col-6">
+                                <label class="form-label">Start Date</label>
+                                <input type="date" class="form-control" id="reviewStartDate" onchange="updateReviewData()">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">End Date</label>
+                                <input type="date" class="form-control" id="reviewEndDate" onchange="updateReviewData()">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Search and Filter -->
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <input type="text" class="form-control" id="reviewSearchInput" placeholder="Search transactions..." onkeyup="filterTransactions()">
+                    </div>
+                    <div class="col-md-6">
+                        <select class="form-select" id="reviewFilterSelect" onchange="filterTransactions()">
+                            <option value="">All Transaction Types</option>
+                            <option value="cargo">Cargos Only</option>
+                            <option value="abono">Abonos Only</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Transaction Table -->
+                <div id="reviewTableContainer">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Loading transactions...</p>
+                    </div>
+                </div>
+
+                <!-- Pagination -->
+                <nav id="reviewPagination" style="display: none;">
+                    <ul class="pagination justify-content-center" id="reviewPaginationList">
+                    </ul>
+                </nav>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="goBackToCalendar()">
+                    <i class="fas fa-arrow-left"></i> Back to Calendar
+                </button>
+                <button type="button" class="btn btn-primary" onclick="exportReviewData()">
+                    <i class="fas fa-download"></i> Export Current View
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

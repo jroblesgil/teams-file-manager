@@ -1,0 +1,159 @@
+<!-- Shared Status Indicators -->
+<!-- CSS classes and icons for file and parse status -->
+
+<style>
+/* File Status Icons */
+.file-icon {
+    font-size: 1.2em;
+    margin-right: 0.5em;
+}
+
+/* Excel Files (STP) */
+.file-icon.excel-present { color: #28a745; } /* Green for Excel files */
+.file-icon.excel-missing { color: #6c757d; } /* Grey for missing Excel */
+
+/* PDF Files (BBVA) */
+.file-icon.pdf-present { color: #dc3545; }   /* Red for PDF files */
+.file-icon.pdf-missing { color: #6c757d; }   /* Grey for missing PDF */
+
+/* Generic Missing */
+.file-icon.missing { color: #6c757d; }       /* Grey for any missing file */
+
+/* Parse Status Icons */
+.database-icon {
+    font-size: 1.1em;
+    margin-right: 0.3em;
+}
+
+.database-icon.unparsed { color: #6c757d; }     /* Grey - not parsed */
+.database-icon.parsed { color: #007bff; }       /* Blue - successfully parsed */
+.database-icon.different-format { color: #fd7e14; } /* Orange - different format */
+.database-icon.parse-error { color: #dc3545; }  /* Red - parsing error */
+
+/* Month Status Borders */
+.month-border {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    border-radius: 0 0 4px 4px;
+}
+
+.month-border.complete { background-color: #28a745; }   /* Green - file present and parsed */
+.month-border.partial { background-color: #ffc107; }    /* Yellow - file present but not parsed */
+.month-border.missing { background-color: #dc3545; }    /* Red - no file found */
+.month-border.unknown { background-color: #6c757d; }    /* Grey - unknown status */
+
+/* Hover Effects */
+.month-square:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    transition: all 0.2s ease;
+}
+
+.month-square:hover .file-icon,
+.month-square:hover .database-icon {
+    transform: scale(1.1);
+    transition: transform 0.2s ease;
+}
+
+/* Badge Styles for Counts */
+.badge {
+    background-color: #007bff;
+    color: white;
+    font-size: 0.75em;
+    padding: 0.2em 0.5em;
+    border-radius: 1em;
+    margin-left: 0.5em;
+}
+
+.badge.success { background-color: #28a745; }
+.badge.warning { background-color: #ffc107; color: #212529; }
+.badge.danger { background-color: #dc3545; }
+
+/* Record Count Display */
+.record-count {
+    font-size: 0.8em;
+    color: #6c757d;
+    margin-left: 0.3em;
+}
+
+/* Tooltip Enhancements */
+[title] {
+    cursor: help;
+}
+
+/* Status Summary Stats */
+.stat-item {
+    display: inline-block;
+    margin-right: 1rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    background-color: #f8f9fa;
+}
+
+.stat-label {
+    font-weight: 500;
+    color: #495057;
+}
+
+.stat-value {
+    font-weight: 600;
+    margin-left: 0.25rem;
+}
+
+.text-success { color: #28a745 !important; }
+.text-warning { color: #ffc107 !important; }
+.text-danger { color: #dc3545 !important; }
+.text-info { color: #17a2b8 !important; }
+</style>
+
+<!-- JavaScript Helper Functions -->
+<script>
+function getFileStatusClass(fileType, isPresent) {
+    if (fileType === 'excel') {
+        return isPresent ? 'excel-present' : 'excel-missing';
+    } else if (fileType === 'pdf') {
+        return isPresent ? 'pdf-present' : 'pdf-missing';
+    }
+    return isPresent ? 'present' : 'missing';
+}
+
+function getParseStatusClass(parseStatus) {
+    switch(parseStatus) {
+        case 'parsed': return 'parsed';
+        case 'different-format': return 'different-format';
+        case 'error': return 'parse-error';
+        default: return 'unparsed';
+    }
+}
+
+function getMonthStatusClass(hasFile, isParsed) {
+    if (!hasFile) return 'missing';
+    if (hasFile && isParsed) return 'complete';
+    if (hasFile && !isParsed) return 'partial';
+    return 'unknown';
+}
+
+function updateStatusIndicators(accountType, monthData) {
+    // Update file and parse status indicators for a specific month
+    const monthElement = document.querySelector(`[data-month="${monthData.month}"][data-account="${accountType}"]`);
+    if (monthElement) {
+        const fileIcon = monthElement.querySelector('.file-icon');
+        const parseIcon = monthElement.querySelector('.database-icon');
+        const monthBorder = monthElement.querySelector('.month-border');
+        
+        // Update file icon
+        fileIcon.className = `file-icon ${getFileStatusClass(monthData.fileType, monthData.hasFile)}`;
+        fileIcon.title = monthData.fileTooltip;
+        
+        // Update parse icon
+        parseIcon.className = `database-icon ${getParseStatusClass(monthData.parseStatus)}`;
+        parseIcon.title = monthData.parseTooltip;
+        
+        // Update month border
+        monthBorder.className = `month-border ${getMonthStatusClass(monthData.hasFile, monthData.isParsed)}`;
+    }
+}
+</script>

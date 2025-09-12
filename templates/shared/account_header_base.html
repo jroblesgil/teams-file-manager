@@ -1,0 +1,54 @@
+<!-- Shared Account Header Component -->
+<!-- Action buttons for Parse and Upload only - Export and Review removed -->
+
+<div class="account-header">
+    <div class="account-info">
+        <h2>{{ account_display_name }}</h2>
+        <p class="account-description">{{ account_description }}</p>
+    </div>
+    
+    <div class="account-actions">
+        <!-- Parse Button -->
+        <button class="btn btn-primary parse-btn" 
+                onclick="startParsing('{{ account_type }}')"
+                {% if not has_files %}disabled{% endif %}>
+            <i class="fas fa-play"></i>
+            Parse {{ file_type }}s
+            {% if pending_count %}
+                <span class="badge">{{ pending_count }}</span>
+            {% endif %}
+        </button>
+        
+        <!-- Export Button - REMOVED -->
+        <!-- Review Button - REMOVED -->
+        
+        <!-- Upload Button -->
+        <button class="btn btn-outline-primary upload-btn" 
+                onclick="openUploadModal('{{ account_type }}')">
+            <i class="fas fa-upload"></i>
+            Upload {{ file_type }}
+        </button>
+    </div>
+</div>
+
+<!-- Status Summary -->
+<div class="account-summary">
+    <div class="summary-stats">
+        <div class="stat-item">
+            <span class="stat-label">Total Files:</span>
+            <span class="stat-value">{{ stats.total_files }}</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Parsed:</span>
+            <span class="stat-value text-success">{{ stats.parsed_files }}</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Pending:</span>
+            <span class="stat-value text-warning">{{ stats.pending_files }}</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Records:</span>
+            <span class="stat-value text-info">{{ stats.total_records }}</span>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block title %}Teams File Manager - Download & Analysis{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <!-- Header -->
+        <div class="text-center mb-4">
+            <h1 class="display-6">Teams File Manager</h1>
+            <p class="lead text-muted">Professional file management and analysis for Microsoft Teams</p>
+        </div>
+
+        <!-- Configuration Card -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-gear"></i>
+                    Configuration
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <label for="clientId" class="form-label">Client ID</label>
+                        <input type="text" class="form-control" id="clientId" value="{{ client_id or '' }}" readonly>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="tenantId" class="form-label">Tenant ID</label>
+                        <input type="text" class="form-control" id="tenantId" value="{{ tenant_id or '' }}" readonly>
+                    </div>
+                </div>
+                <div class="alert alert-info mt-3 mb-0">
+                    <small>
+                        <i class="bi bi-info-circle"></i>
+                        <strong>Target:</strong> FIADO Main Office → Accounting_beta → ec-646180559700000009-202506.xlsx
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Authentication Card -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-shield-check"></i>
+                    Authentication
+                </h5>
+            </div>
+            <div class="card-body text-center">
+                <div id="authSection">
+                    <p class="text-muted">Sign in to access your Teams files and enable analysis features</p>
+                    <button class="btn btn-primary" id="signInBtn" onclick="signIn()">
+                        <i class="bi bi-microsoft"></i>
+                        Sign In with Microsoft
+                    </button>
+                    <button class="btn btn-success ms-2" id="completeAuthBtn" onclick="completeAuth()" style="display: none;">
+                        Complete Sign-In
+                    </button>
+                </div>
+                <div id="userSection" style="display: none;">
+                    <div class="alert alert-success">
+                        <i class="bi bi-check-circle"></i>
+                        <strong>Signed in as:</strong> <span id="userDisplayName"></span>
+                    </div>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="signOut()">
+                        Sign Out
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Download Section -->
+        <div class="card mb-4" id="downloadSection">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-download"></i>
+                    File Download
+                </h5>
+            </div>
+            <div class="card-body">
+                <!-- Method 1: SharePoint Link -->
+                <div class="mb-4">
+                    <h6 class="text-primary">
+                        <i class="bi bi-link-45deg"></i>
+                        Method 1: Download from SharePoint Link (Recommended)
+                    </h6>
+                    <div class="input-group mb-2">
+                        <input type="text" class="form-control" id="sharePointUrl" 
+                               placeholder="Paste SharePoint link here"
+                               value="https://fiado.sharepoint.com/:x:/s/FIADOMainOffice-Accounting_beta/ESaHyq06gI9HrDU4qszESSoBvTq95LMz4Z3lJo1QPvHX0g?e=3YJAQn">
+                        <button class="btn btn-primary" onclick="downloadFromLink()">
+                            <i class="bi bi-download"></i>
+                            Download
+                        </button>
+                    </div>
+                    <small class="text-muted">Works with any SharePoint file link</small>
+                </div>
+
+                <hr>
+
+                <!-- Method 2: File Search -->
+                <div class="mb-4">
+                    <h6 class="text-secondary">
+                        <i class="bi bi-search"></i>
+                        Method 2: Search Team Files
+                    </h6>
+                    <div class="input-group mb-2">
+                        <input type="text" class="form-control" id="fileName" 
+                               placeholder="Enter exact file name"
+                               value="ec-646180559700000009-202506.xlsx">
+                        <button class="btn btn-outline-primary" onclick="searchAndDownload()">
+                            <i class="bi bi-search"></i>
+                            Search & Download
+                        </button>
+                    </div>
+                    <small class="text-muted">Search within FIADO Main Office team</small>
+                </div>
+
+                <hr>
+
+                <!-- Method 3: Browse Files -->
+                <div>
+                    <h6 class="text-secondary">
+                        <i class="bi bi-folder"></i>
+                        Method 3: Browse All Files
+                    </h6>
+                    <button class="btn btn-outline-secondary" onclick="browseFiles()">
+                        <i class="bi bi-folder2-open"></i>
+                        Browse Team Files
+                    </button>
+                    <small class="text-muted d-block mt-1">View all files in the team with download options</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analysis Section -->
+        <div class="card mb-4" id="analysisSection" style="display: none;">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-graph-up"></i>
+                    File Analysis
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="text-center">
+                    <h6>Upload File for Analysis</h6>
+                    <div class="upload-area border border-2 border-dashed rounded p-4 mb-3" 
+                         ondrop="handleFileDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+                        <i class="bi bi-cloud-upload fs-1 text-muted"></i>
+                        <p class="text-muted mt-2">Drag and drop files here or click to browse</p>
+                        <input type="file" id="analysisFileInput" class="d-none" accept=".xlsx,.xls,.csv" onchange="handleFileSelect(event)">
+                        <button class="btn btn-outline-primary" onclick="document.getElementById('analysisFileInput').click()">
+                            <i class="bi bi-file-earmark-plus"></i>
+                            Choose File
+                        </button>
+                    </div>
+                    <div id="analysisResults" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- File Browser Results -->
+        <div class="card" id="fileBrowserCard" style="display: none;">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-files"></i>
+                    Team Files
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="fileList"></div>
+            </div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="card" id="progressCard" style="display: none;">
+            <div class="card-body">
+                <h6 id="progressText">Processing...</h6>
+                <div class="progress">
+                    <div class="progress-bar" id="progressBar" role="progressbar" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Messages -->
+        <div id="statusMessages" class="mt-3"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Pass configuration to JavaScript
+    window.APP_CONFIG = {
+        clientId: '{{ client_id }}',
+        tenantId: '{{ tenant_id }}',
+        teamId: '077539b3-b3af-4646-994f-dd642c9a1190'
+    };
+</script>
+{% endblock %}

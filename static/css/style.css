@@ -1,0 +1,179 @@
+/* Custom styles for Teams File Manager */
+
+body {
+    background-color: #f8f9fa;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.navbar-brand {
+    font-weight: 600;
+}
+
+.card {
+    border: none;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    transition: all 0.15s ease-in-out;
+}
+
+.card:hover {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+.team-card {
+    transition: transform 0.2s ease-in-out;
+}
+
+.team-card:hover {
+    transform: translateY(-2px);
+}
+
+.btn {
+    border-radius: 0.375rem;
+    font-weight: 500;
+}
+
+.table th {
+    border-top: none;
+    background-color: #f8f9fa;
+    font-weight: 600;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.table td {
+    vertical-align: middle;
+}
+
+.badge {
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.text-muted {
+    color: #6c757d !important;
+}
+
+/* Login page styles */
+.login-container {
+    min-height: 80vh;
+    display: flex;
+    align-items: center;
+}
+
+/* File icons */
+.file-icon {
+    width: 20px;
+    height: 20px;
+    margin-right: 8px;
+}
+
+/* Loading spinner */
+.loading {
+    display: none;
+}
+
+.loading.show {
+    display: inline-block;
+}
+
+/* Custom button styles */
+.btn-microsoft {
+    background-color: #0078d4;
+    border-color: #0078d4;
+    color: white;
+}
+
+.btn-microsoft:hover {
+    background-color: #106ebe;
+    border-color: #106ebe;
+    color: white;
+}
+
+/* Search form improvements */
+.search-form {
+    background: white;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+/* File table improvements */
+.file-table .table td {
+    padding: 0.75rem;
+}
+
+.file-table .file-name {
+    font-weight: 500;
+    color: #495057;
+}
+
+.file-table .file-size {
+    color: #6c757d;
+    font-size: 0.875rem;
+}
+
+.file-table .file-date {
+    color: #6c757d;
+    font-size: 0.875rem;
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+    .table-responsive {
+        font-size: 0.875rem;
+    }
+    
+    .btn-sm {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+    }
+    
+    .card-body {
+        padding: 1rem;
+    }
+}
+
+/* Animation classes */
+.fade-in {
+    animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Success and error states */
+.alert {
+    border: none;
+    border-radius: 0.5rem;
+}
+
+.alert-success {
+    background-color: #d1edff;
+    color: #0c5460;
+}
+
+.alert-danger {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+/* Footer */
+footer {
+    margin-top: auto;
+}
+
+/* Utility classes */
+.text-truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

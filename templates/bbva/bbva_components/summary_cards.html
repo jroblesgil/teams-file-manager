@@ -1,0 +1,246 @@
+<!-- BBVA Summary Cards Component -->
+<div class="summary-cards-section">
+    <div class="row">
+        
+        <!-- Total Files Card -->
+        <div class="col-md-3 col-sm-6">
+            <div class="summary-card total-files-card">
+                <div class="card-body">
+                    <div class="card-icon">
+                        <i class="fas fa-file-pdf"></i>
+                    </div>
+                    <div class="card-content">
+                        <h3 class="card-value" id="total-files-count">{{ summary_stats.total_files or 0 }}</h3>
+                        <p class="card-label">Total PDFs</p>
+                        <small class="card-subtitle">Across all accounts</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Parsed Files Card -->
+        <div class="col-md-3 col-sm-6">
+            <div class="summary-card parsed-files-card">
+                <div class="card-body">
+                    <div class="card-icon success">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="card-content">
+                        <h3 class="card-value" id="parsed-files-count">{{ summary_stats.parsed_files or 0 }}</h3>
+                        <p class="card-label">Parsed Files</p>
+                        <small class="card-subtitle">
+                            {% if summary_stats.total_records %}
+                                {{ summary_stats.total_records }} total records
+                            {% else %}
+                                Ready for export
+                            {% endif %}
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Pending Parse Card -->
+        <div class="col-md-3 col-sm-6">
+            <div class="summary-card pending-files-card">
+                <div class="card-body">
+                    <div class="card-icon warning">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <div class="card-content">
+                        <h3 class="card-value" id="pending-files-count">{{ summary_stats.pending_files or 0 }}</h3>
+                        <p class="card-label">Pending Parse</p>
+                        <small class="card-subtitle">
+                            {% if summary_stats.pending_files > 0 %}
+                                Click Parse to process
+                            {% else %}
+                                All files processed
+                            {% endif %}
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Parse Errors Card -->
+        <div class="col-md-3 col-sm-6">
+            <div class="summary-card error-files-card">
+                <div class="card-body">
+                    <div class="card-icon danger">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <div class="card-content">
+                        <h3 class="card-value" id="error-files-count">{{ summary_stats.error_files or 0 }}</h3>
+                        <p class="card-label">Parse Errors</p>
+                        <small class="card-subtitle">
+                            {% if summary_stats.error_files > 0 %}
+                                Need attention
+                            {% else %}
+                                All files OK
+                            {% endif %}
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+</div>
+
+<style>
+.summary-cards-section {
+    margin-bottom: 2rem;
+}
+
+.summary-card {
+    background: white;
+    border-radius: 0.75rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e9ecef;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    height: 100%;
+}
+
+.summary-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.summary-card .card-body {
+    padding: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.card-icon {
+    flex-shrink: 0;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #f8f9fa;
+    color: #6c757d;
+    font-size: 1.5rem;
+}
+
+.card-icon.success {
+    background-color: #d4edda;
+    color: #28a745;
+}
+
+.card-icon.warning {
+    background-color: #fff3cd;
+    color: #ffc107;
+}
+
+.card-icon.danger {
+    background-color: #f8d7da;
+    color: #dc3545;
+}
+
+.card-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.card-value {
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0;
+    color: #495057;
+    line-height: 1;
+}
+
+.card-label {
+    font-weight: 600;
+    margin: 0.25rem 0 0.125rem 0;
+    color: #495057;
+    font-size: 0.9rem;
+}
+
+.card-subtitle {
+    color: #6c757d;
+    margin: 0;
+    font-size: 0.8rem;
+}
+
+/* Specific card highlighting */
+.total-files-card:hover .card-icon {
+    background-color: #004481;
+    color: white;
+}
+
+.parsed-files-card .card-value {
+    color: #28a745;
+}
+
+.pending-files-card .card-value {
+    color: #ffc107;
+}
+
+.error-files-card .card-value {
+    color: #dc3545;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .summary-card .card-body {
+        padding: 1rem;
+        flex-direction: column;
+        text-align: center;
+        gap: 0.5rem;
+    }
+    
+    .card-value {
+        font-size: 1.5rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .col-sm-6 {
+        margin-bottom: 1rem;
+    }
+}
+</style>
+
+<script>
+// Function to update summary cards with real-time data
+function updateSummaryCards(stats) {
+    document.getElementById('total-files-count').textContent = stats.total_files || 0;
+    document.getElementById('parsed-files-count').textContent = stats.parsed_files || 0;
+    document.getElementById('pending-files-count').textContent = stats.pending_files || 0;
+    document.getElementById('error-files-count').textContent = stats.error_files || 0;
+    
+    // Update card styles based on values
+    updateCardStyles(stats);
+}
+
+function updateCardStyles(stats) {
+    // Update pending card subtitle
+    const pendingCard = document.querySelector('.pending-files-card .card-subtitle');
+    if (stats.pending_files > 0) {
+        pendingCard.textContent = 'Click Parse to process';
+    } else {
+        pendingCard.textContent = 'All files processed';
+    }
+    
+    // Update error card subtitle
+    const errorCard = document.querySelector('.error-files-card .card-subtitle');
+    if (stats.error_files > 0) {
+        errorCard.textContent = 'Need attention';
+    } else {
+        errorCard.textContent = 'All files OK';
+    }
+    
+    // Update parsed card subtitle
+    const parsedCard = document.querySelector('.parsed-files-card .card-subtitle');
+    if (stats.total_records) {
+        parsedCard.textContent = `${stats.total_records} total records`;
+    } else {
+        parsedCard.textContent = 'Ready for export';
+    }
+}
+</script>

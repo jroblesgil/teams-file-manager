@@ -1,0 +1,401 @@
+<!-- templates/stp_components/styles.html -->
+<style>
+/* Upload button styling */
+.upload-container {
+    position: relative;
+}
+
+.upload-drop-zone {
+    border: 2px dashed #dee2e6;
+    border-radius: 6px;
+    padding: 20px;
+    text-align: center;
+    background-color: #f8f9fa;
+    transition: all 0.3s ease;
+    margin-bottom: 1rem;
+}
+
+.upload-drop-zone.dragover {
+    border-color: #0d6efd;
+    background-color: #e7f3ff;
+}
+
+.upload-drop-zone.error {
+    border-color: #dc3545;
+    background-color: #f8d7da;
+}
+
+.upload-drop-zone.success {
+    border-color: #198754;
+    background-color: #d1edff;
+}
+
+/* Upload modal */
+.upload-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1050;
+}
+
+.upload-modal.show {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.upload-modal-content {
+    background: white;
+    border-radius: 8px;
+    padding: 2rem;
+    max-width: 500px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+/* Compact Calendar Styles */
+.compact-card {
+    height: 60px;
+}
+
+.month-square {
+    aspect-ratio: 1;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    transition: all 0.2s ease;
+    min-height: 70px;
+    cursor: pointer;
+    padding: 4px;
+}
+
+.month-square:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.month-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #495057;
+    position: absolute;
+    top: 2px;
+    left: 4px;
+    text-transform: uppercase;
+}
+
+.file-icons {
+    display: flex;
+    gap: 6px;
+    margin-top: 12px;
+}
+
+.file-icons i {
+    font-size: 16px;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+
+.file-icons i:hover {
+    transform: scale(1.2);
+}
+
+.pdf-icon {
+    color: #dc3545;
+}
+
+.excel-icon {
+    color: #198754;
+}
+
+.pdf-icon-missing,
+.excel-icon-missing {
+    color: #dee2e6;
+    cursor: default;
+}
+
+.pdf-icon-missing:hover,
+.excel-icon-missing:hover {
+    transform: none;
+}
+
+/* Parse status indicators with record count - COMPLETELY FIXED */
+.parse-indicator-with-count {
+    position: absolute;
+    bottom: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+/* Default grey color for ALL database icons first */
+.parse-indicator-with-count .fas.fa-database {
+    color: #6c757d !important;
+    font-size: 10px;
+}
+
+/* Only override with colors when specific parse status classes are present */
+.parse-indicator-with-count .fas.fa-database.parse-icon-parsed {
+    color: #0066cc !important;
+}
+
+.parse-indicator-with-count .fas.fa-database.parse-icon-different {
+    color: #ff8800 !important;
+}
+
+.parse-indicator-with-count .fas.fa-database.parse-icon-error {
+    color: #cc0000 !important;
+}
+
+/* Record count - COMPLETELY FIXED to remove any blue styling */
+.record-count {
+    font-size: 8px;
+    font-weight: 600;
+    color: #495057 !important;
+    background: transparent !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    min-width: auto !important;
+    text-align: center;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+    /* Remove any potential inherited styles */
+    text-decoration: none !important;
+    text-shadow: none !important;
+}
+
+/* Month square parse status styling - Keep blue outline for parsed months only */
+.parse-status-parsed {
+    box-shadow: 0 0 0 2px #0066cc inset;
+}
+
+.parse-status-different_format {
+    box-shadow: 0 0 0 2px #ff8800 inset;
+}
+
+.parse-status-parse_error {
+    box-shadow: 0 0 0 2px #cc0000 inset;
+}
+
+/* No special styling for unparsed months */
+.parse-status-not_parsed {
+    /* Uses default month-square styling with no special border */
+}
+
+/* Status-based styling for file availability */
+.status-complete {
+    border-color: #198754;
+    background-color: #f8fff9;
+}
+
+.status-partial {
+    border-color: #ffc107;
+    background-color: #fffdf5;
+}
+
+.status-missing {
+    border-color: #dee2e6;
+    background-color: #f8f9fa;
+}
+
+/* Info icon styling */
+.info-icon {
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+}
+
+.info-icon:hover {
+    opacity: 1;
+}
+
+/* Button group styling */
+.btn-group .btn {
+    border-radius: 0.375rem;
+    margin-left: 2px;
+}
+
+.btn-group .btn:first-child {
+    margin-left: 0;
+}
+
+/* Tab styling */
+.nav-tabs .nav-link {
+    border-radius: 0.375rem 0.375rem 0 0;
+    font-size: 0.875rem;
+}
+
+.nav-tabs .nav-link.active {
+    background-color: #f8f9fa;
+    font-weight: 600;
+}
+
+.badge-sm {
+    font-size: 0.7rem;
+    padding: 0.2em 0.4em;
+}
+
+/* Review table styling */
+.review-table {
+    font-size: 0.875rem;
+}
+
+.review-table th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    border-bottom: 2px solid #dee2e6;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.review-table td {
+    vertical-align: middle;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.review-table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* Progress modal styling */
+#parseFileList {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #e9ecef;
+    border-radius: 4px;
+    padding: 8px;
+    margin-top: 12px;
+    background-color: #f8f9fa;
+}
+
+.file-processing {
+    padding: 6px 10px;
+    margin: 4px 0;
+    background: linear-gradient(90deg, #e3f2fd 0%, #ffffff 100%);
+    border-radius: 4px;
+    border-left: 4px solid #2196f3;
+    animation: pulse 1.5s ease-in-out infinite;
+    display: flex;
+    align-items: center;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.8; }
+    100% { opacity: 1; }
+}
+
+.file-processed {
+    padding: 6px 10px;
+    margin: 4px 0;
+    background: linear-gradient(90deg, #e8f5e9 0%, #ffffff 100%);
+    border-radius: 4px;
+    border-left: 4px solid #4caf50;
+    display: flex;
+    align-items: center;
+}
+
+.file-error {
+    padding: 6px 10px;
+    margin: 4px 0;
+    background: linear-gradient(90deg, #fff3e0 0%, #ffffff 100%);
+    border-radius: 4px;
+    border-left: 4px solid #ff9800;
+    display: flex;
+    align-items: center;
+    font-size: 0.875rem;
+}
+
+/* Progress bar animation */
+#parseProgressBar {
+    transition: width 0.5s ease-in-out;
+    background: linear-gradient(90deg, #2196f3, #4caf50);
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
+}
+
+@keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+    .month-square {
+        min-height: 60px;
+    }
+    
+    .file-icons i {
+        font-size: 14px;
+    }
+    
+    .month-label {
+        font-size: 0.65rem;
+    }
+    
+    .record-count {
+        font-size: 7px;
+    }
+}
+
+@media (max-width: 768px) {
+    .month-square {
+        min-height: 50px;
+    }
+    
+    .file-icons {
+        gap: 4px;
+        margin-top: 8px;
+    }
+    
+    .file-icons i {
+        font-size: 12px;
+    }
+    
+    .month-label {
+        font-size: 0.6rem;
+        top: 1px;
+        left: 2px;
+    }
+    
+    .record-count {
+        font-size: 6px;
+    }
+    
+    .parse-indicator-with-count {
+        gap: 1px;
+    }
+}
+
+@media (max-width: 576px) {
+    .file-icons {
+        flex-direction: column;
+        gap: 2px;
+    }
+    
+    #parseFileList {
+        max-height: 150px;
+    }
+    
+    .file-processing,
+    .file-processed,
+    .file-error {
+        font-size: 0.8rem;
+        padding: 4px 8px;
+    }
+}
+</style>

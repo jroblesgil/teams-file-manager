@@ -1,0 +1,30 @@
+{# templates/stp/stp_calendar.html - FIXED: Clean comments and removed unused modals #}
+{% extends "base.html" %}
+
+{% block title %}STP Calendar - Teams File Manager{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    {# Header #}
+    {% include 'stp/components/header.html' %}
+    
+    {# Summary Cards #}
+    {% include 'stp/components/summary_cards.html' %}
+
+    {# STP Accounts Tabs and Calendar #}
+    {% include 'stp/components/accounts_tabs.html' %}
+</div>
+
+{# Modals - Only include needed ones #}
+{% include 'stp/components/modals/account_info_modal.html' %}
+{% include 'stp/components/modals/upload_modal.html' %}
+{% include 'stp/components/modals/parse_modal.html' %}
+{% include 'stp/components/modals/conflict_modal.html' %}
+
+{# Styles #}
+{% include 'stp/components/styles.html' %}
+{% endblock %}
+
+{% block scripts %}
+{% include 'stp/components/scripts.html' %}
+{% endblock %}

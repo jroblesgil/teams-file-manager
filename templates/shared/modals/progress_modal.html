@@ -1,0 +1,35 @@
+<!-- Shared Progress Modal -->
+<!-- Used for showing parse/upload progress -->
+
+<div class="modal fade" id="progressModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Processing...</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="progress mb-3">
+                    <div class="progress-bar" role="progressbar" style="width: 0%">
+                        <span class="progress-text">0%</span>
+                    </div>
+                </div>
+                <div class="progress-details">
+                    <p class="current-status">Initializing...</p>
+                    <div class="progress-stats">
+                        <small class="text-muted">
+                            Files processed: <span id="files-processed">0</span> / 
+                            <span id="total-files">0</span>
+                        </small>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-danger" id="cancel-progress">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>

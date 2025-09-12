@@ -1,0 +1,35 @@
+<!-- templates/stp_components/summary_cards.html -->
+<div class="row mb-3">
+    <div class="col-md-3">
+        <div class="card text-center compact-card">
+            <div class="card-body py-2">
+                <h6 class="card-title text-success mb-1">{{ summary.total_files }}</h6>
+                <small class="card-text">Total Files</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center compact-card">
+            <div class="card-body py-2">
+                <h6 class="card-title text-success mb-1">{{ summary.complete_months }}</h6>
+                <small class="card-text">Complete</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center compact-card">
+            <div class="card-body py-2">
+                <h6 class="card-title text-warning mb-1">{{ summary.partial_months }}</h6>
+                <small class="card-text">Partial</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center compact-card">
+            <div class="card-body py-2">
+                <h6 class="card-title text-danger mb-1">{{ summary.missing_months }}</h6>
+                <small class="card-text">Missing</small>
+            </div>
+        </div>
+    </div>
+</div>

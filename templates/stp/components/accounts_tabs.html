@@ -1,0 +1,44 @@
+<!-- templates/stp/components/accounts_tabs.html -->
+<div class="row">
+    <div class="col-12">
+        <div class="card {{ 'bbva-calendar' if system_type == 'bbva' else 'stp-calendar' }}">
+            <div class="card-header py-2">
+                <ul class="nav nav-tabs card-header-tabs mb-0" id="stpTabs" role="tablist">
+                    {% for account_number, account_data in calendar_data.items() %}
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link py-2 px-3 {% if loop.first %}active{% endif %}" 
+                                id="tab-{{ account_number }}" 
+                                data-bs-toggle="tab" 
+                                data-bs-target="#content-{{ account_number }}" 
+                                type="button" 
+                                role="tab">
+                            <small>{{ account_data.account_info.name or account_number }}</small>
+                            <span class="badge bg-primary ms-1 badge-sm">{{ account_data.total_files }}</span>
+                            <span class="info-icon" onclick="showAccountInfo('{{ account_number }}')" title="Account Information">
+                                &nbsp;&nbsp;ℹ️
+                            </span>
+                        </button>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <div class="card-body p-3">
+                <div class="tab-content" id="stpTabsContent">
+                    {% for account_number, account_data in calendar_data.items() %}
+                    <div class="tab-pane fade {% if loop.first %}show active{% endif %}" 
+                         id="content-{{ account_number }}" 
+                         role="tabpanel" 
+                         aria-labelledby="tab-{{ account_number }}">
+                        
+                        <!-- Account Header with Action Buttons -->
+                        {% include 'stp/components/account_header.html' %}
+
+                        <!-- Calendar Grid -->
+                        {% include 'stp/components/calendar_grid.html' %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

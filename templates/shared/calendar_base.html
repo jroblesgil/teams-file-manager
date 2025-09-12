@@ -1,0 +1,67 @@
+<!-- Shared Calendar Base Component -->
+<!-- Can be used by both STP and BBVA systems -->
+
+<div class="calendar-container">
+    <div class="calendar-grid">
+        <div class="calendar-header">
+            <h3>{{ current_year }} Calendar - {{ current_account_name }}</h3>
+        </div>
+        
+        <div class="months-grid">
+            {% for month in months %}
+            <div class="month-square" 
+                 data-month="{{ month.number }}" 
+                 data-account="{{ current_account_type }}"
+                 onclick="handleMonthClick('{{ current_account_type }}', {{ month.number }})">
+                
+                <div class="month-header">
+                    <span class="month-name">{{ month.name }}</span>
+                    <span class="month-year">{{ current_year }}</span>
+                </div>
+                
+                <div class="month-content">
+                    <!-- File status icon -->
+                    <div class="file-status">
+                        {% if month.file_info %}
+                            <i class="file-icon {{ month.file_info.icon_class }}" 
+                               title="{{ month.file_info.tooltip }}"></i>
+                            <span class="file-name">{{ month.file_info.display_name }}</span>
+                        {% else %}
+                            <i class="file-icon missing" title="No file found"></i>
+                            <span class="file-name">Missing</span>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Parse status icon -->
+                    <div class="parse-status">
+                        {% if month.parse_info %}
+                            <i class="database-icon {{ month.parse_info.status_class }}" 
+                               title="{{ month.parse_info.tooltip }}"></i>
+                            {% if month.parse_info.record_count %}
+                                <span class="record-count">{{ month.parse_info.record_count }} records</span>
+                            {% endif %}
+                        {% else %}
+                            <i class="database-icon unparsed" title="Not parsed"></i>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- Month status border -->
+                <div class="month-border {{ month.status_class }}"></div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Month Click Handler (to be customized by each system) -->
+<script>
+function handleMonthClick(accountType, month) {
+    // This function will be implemented differently by STP vs BBVA
+    if (window.systemType === 'stp') {
+        handleStpMonthClick(accountType, month);
+    } else if (window.systemType === 'bbva') {
+        handleBbvaMonthClick(accountType, month);
+    }
+}
+</script>

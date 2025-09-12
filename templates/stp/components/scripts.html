@@ -1,0 +1,1879 @@
+<!-- templates/stp_components/scripts.html -->
+<script>
+// Dynamic system configuration based on system_type
+const SYSTEM_TYPE = '{{ system_type | default("stp") }}';
+
+// Dynamic account configuration
+{% if system_type == 'bbva' %}
+const VALID_ACCOUNTS = {
+    '012180001198203451': 'BBVA MX MXN',
+    '012180001201205883': 'BBVA MX USD', 
+    '012180001182790637': 'BBVA SA MXN',
+    '012222001182793149': 'BBVA SA USD',
+    '012180001232011635': 'BBVA IP Corp',
+    '012180001232011554': 'BBVA IP Clientes'
+};
+
+// BBVA API endpoints
+const API_ENDPOINTS = {
+    calendar_status: '/api/bbva/calendar-status',
+    record_counts: '/api/bbva/record-counts',
+    account_detail: '/bbva-account',
+    parse: '/api/bbva/parse',
+    upload: '/api/bbva/upload'
+};
+{% else %}
+const VALID_ACCOUNTS = {
+    '646180559700000009': 'STP SA',
+    '646990403000000003': 'STP IP - PI', 
+    '646180403000000004': 'STP IP - PD'
+};
+
+// STP API endpoints  
+const API_ENDPOINTS = {
+    calendar_status: '/api/stp/calendar-status',
+    record_counts: '/api/stp/record-counts',
+    account_detail: '/stp-account',
+    parse: '/api/stp/parse',
+    upload: '/api/stp/upload'
+};
+{% endif %}
+
+let selectedFiles = [];
+let currentParseAccount = null;
+let currentParseSession = null;
+let parseProgressInterval = null;
+
+// Global variables for tracking data
+let globalTrackingData = {};
+
+// ============================================================================
+// HELPER FUNCTIONS - MUST BE DEFINED FIRST
+// ============================================================================
+
+function getAccountType(accountIdentifier) {
+    // For both STP and BBVA, the VALID_ACCOUNTS object should have the mapping
+    return VALID_ACCOUNTS[accountIdentifier] || `Unknown Account (${accountIdentifier})`;
+}
+
+function getCurrentYear() {
+    // Try multiple methods to get the year
+    
+    // Method 1: Check if year is in the URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const yearFromUrl = urlParams.get('year');
+    if (yearFromUrl) {
+        return parseInt(yearFromUrl);
+    }
+    
+    // Method 2: Get from the calendar title (e.g., "STP Parse" or "Banks Parse")
+    const titleElement = document.querySelector('h1.h3');
+    if (titleElement) {
+        const matches = titleElement.textContent.match(/\d{4}/);
+        if (matches) {
+            return parseInt(matches[0]);
+        }
+    }
+    
+    // Method 3: Get from the active year button
+    const activeYearBtn = document.querySelector('.btn-group .btn.btn-primary.disabled');
+    if (activeYearBtn) {
+        const yearText = activeYearBtn.textContent.trim();
+        if (yearText && !isNaN(yearText)) {
+            return parseInt(yearText);
+        }
+    }
+    
+    // Method 4: Check the URL path for year
+    const pathMatch = window.location.pathname.match(/year=(\d{4})/);
+    if (pathMatch) {
+        return parseInt(pathMatch[1]);
+    }
+    
+    // Default to current year if all else fails
+    return new Date().getFullYear();
+}
+
+// ============================================================================
+// INFO ICON FUNCTIONALITY (REQUIREMENT 1)
+// ============================================================================
+
+function showAccountInfo(accountIdentifier) {
+    // Prevent event bubbling to tab click
+    event.stopPropagation();
+    
+    currentParseAccount = accountIdentifier;
+    
+    // Show modal
+    const infoModal = new bootstrap.Modal(document.getElementById('accountInfoModal'));
+    infoModal.show();
+    
+    // Load account info content with system detection
+    loadAccountInfo(accountIdentifier);
+}
+
+function createAccountInfoTable(html, accountIdentifier, year) {
+    /**
+     * Create system-appropriate account info table
+     */
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    
+    if (SYSTEM_TYPE === 'bbva') {
+        // For BBVA: Create custom PDF-only table
+        return createBbvaAccountTable(doc, accountIdentifier, year);
+    } else {
+        // For STP: Use original table with both PDF and Excel
+        const monthsTable = doc.querySelector('.table');
+        return monthsTable ? monthsTable.outerHTML : null;
+    }
+}
+
+function createBbvaAccountTable(doc, accountIdentifier, year) {
+    /**
+     * Create BBVA-specific account info table (PDF only)
+     */
+    const monthsTable = doc.querySelector('.table');
+    if (!monthsTable) return null;
+    
+    // Clone the table and modify it for BBVA
+    const bbvaTable = monthsTable.cloneNode(true);
+    
+    // Update table headers - remove Excel column
+    const headerRow = bbvaTable.querySelector('thead tr');
+    if (headerRow) {
+        headerRow.innerHTML = `
+            <th>Month</th>
+            <th>PDF File</th>
+            <th>Status</th>
+            <th>Actions</th>
+        `;
+    }
+    
+    // Update table rows - remove Excel column, fix status
+    const bodyRows = bbvaTable.querySelectorAll('tbody tr');
+    bodyRows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        if (cells.length >= 4) {
+            // Keep: Month, PDF File, Status, Actions
+            // Remove: Excel File column (usually 3rd column)
+            
+            // Update status cell to show "Complete" instead of "Partial" for PDF files
+            const statusCell = cells[2]; // Status column
+            const hasPdf = !cells[1].textContent.includes('Not available');
+            
+            if (hasPdf) {
+                statusCell.innerHTML = `
+                    <span class="badge bg-success">
+                        <i class="fas fa-check-circle"></i> Complete
+                    </span>
+                `;
+                row.className = 'status-complete';
+            }
+            
+            // Remove Excel file column by rebuilding the row
+            row.innerHTML = `
+                ${cells[0].outerHTML}
+                ${cells[1].outerHTML}
+                ${statusCell.outerHTML}
+                ${cells[cells.length - 1].outerHTML}
+            `;
+        }
+    });
+    
+    return bbvaTable.outerHTML;
+}
+
+async function loadAccountInfo(accountIdentifier) {
+    const contentDiv = document.getElementById('accountInfoContent');
+    
+    try {
+        // Show loading
+        contentDiv.innerHTML = `
+            <div class="text-center">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2">Loading account information...</p>
+            </div>
+        `;
+        
+        // Detect system type and build appropriate endpoint
+        const year = getCurrentYear();
+        let endpoint;
+        let accountDisplayName;
+        
+        if (SYSTEM_TYPE === 'bbva') {
+            // For BBVA: use CLABE and bbva-account endpoint
+            endpoint = `/bbva-account/${accountIdentifier}?year=${year}`;
+            accountDisplayName = getAccountType(accountIdentifier);
+        } else {
+            // For STP: use account number and stp-account endpoint
+            endpoint = `/stp-account/${accountIdentifier}?year=${year}`;
+            accountDisplayName = getAccountType(accountIdentifier);
+        }
+        
+        console.log(`Loading account info from: ${endpoint}`);
+        
+        const response = await fetch(endpoint);
+        
+        if (!response.ok) {
+            if (response.status === 404) {
+                throw new Error(`Account information endpoint not found: ${endpoint}`);
+            } else {
+                throw new Error(`Failed to load account information (${response.status})`);
+            }
+        }
+        
+        const html = await response.text();
+        
+        // Create system-appropriate table content
+        const tableContent = createAccountInfoTable(html, accountIdentifier, year);
+
+        if (tableContent) {
+            contentDiv.innerHTML = `
+                <div class="account-info-content">
+                    <h6>${accountDisplayName} (${accountIdentifier})</h6>
+                    <p class="text-muted mb-3">Monthly file status for ${year}</p>
+                    <p class="small text-info">
+                        <i class="fas fa-info-circle"></i>
+                        ${SYSTEM_TYPE === 'bbva' ? 'BBVA accounts use PDF files only' : 'STP accounts require both PDF and Excel files'}
+                    </p>
+                    ${tableContent}
+                </div>
+            `;
+        } else {
+            // If no table found, show the entire content (might be different structure)
+            const mainContent = doc.querySelector('.container-fluid, .container, main, .content');
+            if (mainContent) {
+                contentDiv.innerHTML = `
+                    <div class="account-info-content">
+                        <h6>${accountDisplayName} (${accountIdentifier})</h6>
+                        <p class="text-muted mb-3">Monthly file status for ${year}</p>
+                        ${mainContent.innerHTML}
+                    </div>
+                `;
+            } else {
+                throw new Error('Unable to parse account information from response');
+            }
+        }
+        
+    } catch (error) {
+        console.error('Error loading account info:', error);
+        contentDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <h6>Error Loading Account Information</h6>
+                <p>${error.message}</p>
+                <p class="small text-muted">System: ${SYSTEM_TYPE || 'unknown'}</p>
+                <p class="small text-muted">Account: ${accountIdentifier}</p>
+                <button class="btn btn-primary btn-sm" onclick="loadAccountInfo('${accountIdentifier}')">
+                    <i class="fas fa-redo"></i> Retry
+                </button>
+            </div>
+        `;
+    }
+}
+
+// ============================================================================
+// RECORD COUNT FUNCTIONALITY (REQUIREMENT 3) - FIXED
+// ============================================================================
+
+async function loadRecordCounts() {
+    try {
+        const year = getCurrentYear();
+        console.log('Loading record counts for year:', year, 'System:', SYSTEM_TYPE);
+        const response = await fetch(`${API_ENDPOINTS.record_counts}/${year}`);
+        
+        if (!response.ok) {
+            throw new Error('Failed to load record counts');
+        }
+        
+        const data = await response.json();
+        console.log('RAW API RESPONSE:', data);
+        console.log('Record counts data:', data.record_counts);
+        
+        updateRecordCountsDisplay(data.record_counts);
+        
+    } catch (error) {
+        console.error('Error loading record counts:', error);
+        // Set all counts to 0 on error
+        document.querySelectorAll('.record-count').forEach(element => {
+            element.textContent = '0';
+        });
+    }
+}
+
+async function loadTrackingData() {
+    try {
+        const year = getCurrentYear();
+        const response = await fetch(`${API_ENDPOINTS.calendar_status}/${year}`);
+        
+        if (response.ok) {
+            const data = await response.json();
+            // Extract tracking data from calendar data
+            Object.keys(data.calendar_data).forEach(accountNumber => {
+                const accountData = data.calendar_data[accountNumber];
+                globalTrackingData[accountNumber] = {};
+                
+                Object.keys(accountData.months).forEach(monthKey => {
+                    const monthData = accountData.months[monthKey];
+                    // Consider a month "parsed" if it has parse_status other than 'not_parsed'
+                    globalTrackingData[accountNumber][monthKey] = {
+                        isParsed: monthData.parse_status && monthData.parse_status !== 'not_parsed'
+                    };
+                });
+            });
+            
+            console.log('Global tracking data loaded:', globalTrackingData);
+        }
+    } catch (error) {
+        console.error('Error loading tracking data:', error);
+    }
+}
+
+function updateRecordCountsDisplay(recordCounts) {
+    console.log('Updating record counts display with:', recordCounts);
+    
+    const elements = document.querySelectorAll('.record-count[data-account][data-month]');
+    console.log('Found', elements.length, 'record count elements');
+    
+    elements.forEach((element, index) => {
+        const account = element.getAttribute('data-account');
+        const month = element.getAttribute('data-month');
+        
+        console.log(`Element ${index}: account=${account}, month=${month}`);
+        
+        // Get the actual record count
+        const count = recordCounts[account] && recordCounts[account][month] ? recordCounts[account][month] : 0;
+        console.log(`  - Count for ${account}/${month}: ${count}`);
+        
+        element.textContent = count;
+        console.log(`  - Set element text to: ${element.textContent}`);
+        
+        // Update the icon styling based on whether the month has been parsed
+        const indicator = element.closest('.parse-indicator-with-count');
+        const iconElement = indicator ? indicator.querySelector('i') : null;
+        
+        if (iconElement) {
+            // Check if this month has been parsed using tracking data
+            const isParsed = globalTrackingData[account] && 
+                           globalTrackingData[account][month] && 
+                           globalTrackingData[account][month].isParsed;
+            
+            console.log(`  - Account ${account}, Month ${month}: Count=${count}, Parsed=${isParsed}`);
+            
+            // FIXED: Apply icon colors based on parse status, NOT record count
+            // Remove inline styles and let CSS handle colors
+            if (isParsed) {
+                // Blue icon for parsed months (regardless of count)
+                iconElement.className = 'fas fa-database parse-icon-parsed';
+                // Remove any existing inline style
+                iconElement.removeAttribute('style');
+                iconElement.setAttribute('title', count > 0 ? `${count} records parsed` : 'Parsed but no records found');
+                console.log(`  - Applied BLUE icon for parsed month`);
+            } else {
+                // Grey icon for unparsed months
+                iconElement.className = 'fas fa-database';
+                // Remove any existing inline style
+                iconElement.removeAttribute('style');
+                iconElement.setAttribute('title', 'Not parsed yet');
+                console.log(`  - Applied GREY icon for unparsed month`);
+            }
+        } else {
+            console.log(`  - No icon element found for ${account}/${month}`);
+        }
+    });
+}
+
+// ============================================================================
+// PARSE FUNCTIONALITY WITH REAL-TIME PROGRESS - DYNAMIC
+// ============================================================================
+
+async function parseAccount(accountNumber) {
+    console.log('Parse started for account:', accountNumber, 'System:', SYSTEM_TYPE);
+    currentParseAccount = accountNumber;
+    currentParseSession = null;
+    
+    // Clear any existing interval
+    if (parseProgressInterval) {
+        clearInterval(parseProgressInterval);
+        parseProgressInterval = null;
+    }
+    
+    // Show modal
+    const parseModal = new bootstrap.Modal(document.getElementById('parseModal'));
+    parseModal.show();
+    
+    // Reset modal to show progress section
+    document.getElementById('parseProgress').style.display = 'block';
+    document.getElementById('parseResults').style.display = 'none';
+    document.getElementById('parseStatus').textContent = 'Starting...';
+    document.getElementById('parseDetails').textContent = 'Initializing parse process';
+    document.getElementById('parseProgressBar').style.width = '0%';
+    document.getElementById('parseProgressBar').textContent = '';
+    document.getElementById('parseFileList').innerHTML = '';
+    document.getElementById('parseCloseBtn').textContent = 'Cancel';
+    
+    try {
+        // Start the parse using dynamic endpoint
+        console.log('Sending parse request...');
+        document.getElementById('parseStatus').textContent = 'Connecting to server...';
+        document.getElementById('parseProgressBar').style.width = '10%';
+        
+        const response = await fetch(`${API_ENDPOINTS.parse}/${accountNumber}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        console.log('Parse response:', result);
+        
+        if (result.session_id) {
+            currentParseSession = result.session_id;
+            console.log('Session ID:', result.session_id);
+            document.getElementById('parseStatus').textContent = 'Processing...';
+            document.getElementById('parseProgressBar').style.width = '30%';
+            
+            // Start polling for progress using dynamic endpoint
+            let pollCount = 0;
+            const maxPolls = 60; // Max 30 seconds
+            
+            parseProgressInterval = setInterval(async () => {
+                pollCount++;
+                console.log('Poll #' + pollCount);
+                
+                if (!currentParseSession) {
+                    clearInterval(parseProgressInterval);
+                    return;
+                }
+                
+                try {
+                    const progressResponse = await fetch(`${API_ENDPOINTS.parse}-progress/${currentParseSession}`);
+                    const progress = await progressResponse.json();
+                    console.log('Progress:', progress);
+                    
+                    // Update UI based on status
+                    updateProgressUI(progress);
+                    
+                    // Check if completed
+                    if (progress.status === 'completed') {
+                        clearInterval(parseProgressInterval);
+                        parseProgressInterval = null;
+                        document.getElementById('parseProgressBar').style.width = '100%';
+                        document.getElementById('parseProgressBar').textContent = '100%';
+                        
+                        // Show results after a short delay
+                        setTimeout(() => {
+                            showParseResults(progress);
+                        }, 500);
+                    } else if (progress.status === 'error') {
+                        clearInterval(parseProgressInterval);
+                        parseProgressInterval = null;
+                        showParseError(progress.details || 'An error occurred');
+                    }
+                    
+                } catch (error) {
+                    console.error('Error polling progress:', error);
+                }
+                
+                // Stop after max polls
+                if (pollCount >= maxPolls) {
+                    clearInterval(parseProgressInterval);
+                    parseProgressInterval = null;
+                    console.log('Max polls reached');
+                }
+            }, 500); // Poll every 500ms
+            
+        } else {
+            // No session ID, show immediate result
+            console.log('No session ID, showing immediate result');
+            showImmediateResult(result);
+        }
+        
+    } catch (error) {
+        console.error('Parse error:', error);
+        showParseError('Failed to connect to server: ' + error.message);
+    }
+}
+
+function updateProgressUI(progress) {
+    const statusElement = document.getElementById('parseStatus');
+    const detailsElement = document.getElementById('parseDetails');
+    const progressBar = document.getElementById('parseProgressBar');
+    
+    // Update status text
+    const statusTexts = {
+        'initializing': 'Initializing...',
+        'fetching_files': 'Fetching Files...',
+        'checking_files': 'Checking Files...',
+        'loading_database': 'Loading Database...',
+        'processing_files': 'Processing Files...',
+        'saving_database': 'Saving...',
+        'completed': 'Completed!',
+        'error': 'Error'
+    };
+    
+    if (statusElement) {
+        statusElement.textContent = statusTexts[progress.status] || progress.status;
+    }
+    
+    if (detailsElement) {
+        detailsElement.textContent = progress.details || '';
+    }
+    
+    // Update progress percentage
+    if (progress.progress_percentage && progressBar) {
+        progressBar.style.width = progress.progress_percentage + '%';
+        if (progress.progress_percentage > 0) {
+            progressBar.textContent = progress.progress_percentage + '%';
+        }
+    }
+}
+
+function showParseResults(progress) {
+    console.log('showParseResults called with:', progress, 'System:', SYSTEM_TYPE);
+    
+    const parseProgress = document.getElementById('parseProgress');
+    const parseResults = document.getElementById('parseResults');
+    const parseCloseBtn = document.getElementById('parseCloseBtn');
+    
+    if (!parseProgress || !parseResults) {
+        console.error('Modal structure missing');
+        alert('Parse completed but cannot display results. Please refresh the page.');
+        
+        // IMMEDIATE refresh for both systems
+        window.location.reload();
+        return;
+    }
+    
+    // Hide progress, show results
+    parseProgress.style.display = 'none';
+    parseResults.style.display = 'block';
+    
+    if (parseCloseBtn) {
+        parseCloseBtn.textContent = 'Close';
+    }
+    
+    // Set up results display
+    let alertDiv = document.getElementById('parseResultAlert');
+    let titleDiv = document.getElementById('parseResultTitle');
+    let contentDiv = document.getElementById('parseResultContent');
+    
+    if (!alertDiv || !titleDiv || !contentDiv) {
+        parseResults.innerHTML = `
+            <div class="alert alert-info" id="parseResultAlert">
+                <h6 id="parseResultTitle">Parse Complete</h6>
+                <div id="parseResultContent">Processing completed.</div>
+            </div>
+        `;
+        alertDiv = document.getElementById('parseResultAlert');
+        titleDiv = document.getElementById('parseResultTitle');
+        contentDiv = document.getElementById('parseResultContent');
+    }
+    
+    // Display appropriate results based on progress
+    if (progress.files_processed === 0 && progress.files_checked > 0) {
+        alertDiv.className = 'alert alert-info';
+        titleDiv.innerHTML = '<i class="fas fa-check-circle me-2"></i>All Files Up to Date';
+        contentDiv.innerHTML = `
+            <p>${progress.details || 'All files have already been parsed.'}</p>
+            <ul>
+                <li>Files Checked: ${progress.files_checked}</li>
+                <li>Files Already Parsed: ${progress.files_skipped || progress.files_checked}</li>
+            </ul>
+        `;
+    } else if (progress.files_processed > 0) {
+        alertDiv.className = 'alert alert-success';
+        titleDiv.innerHTML = '<i class="fas fa-check-circle me-2"></i>Parse Completed!';
+        contentDiv.innerHTML = `
+            <ul>
+                <li>Files Processed: ${progress.files_processed}</li>
+                <li>Transactions Added: ${progress.transactions_added || 0}</li>
+            </ul>
+        `;
+    } else {
+        alertDiv.className = 'alert alert-warning';
+        titleDiv.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>No Files to Process';
+        contentDiv.innerHTML = '<p>No PDF files found for this account.</p>';
+    }
+    
+    // IMMEDIATE refresh for BBVA (no more delays)
+    if (SYSTEM_TYPE === 'bbva') {
+        console.log('BBVA: Parse complete, refreshing immediately');
+        // Auto-close modal and refresh immediately
+        setTimeout(() => {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('parseModal'));
+            if (modal) {
+                modal.hide();
+            }
+            // Immediate reload, no delay
+            window.location.reload();
+        }, 1500); // Just enough time to read the result
+    } else {
+        console.log('STP: Parse complete, using JavaScript refresh');
+        refreshCalendarStatus();
+    }
+}
+
+function refreshCalendarStatus() {
+    console.log('Refreshing calendar status for system:', SYSTEM_TYPE);
+    
+    if (SYSTEM_TYPE === 'bbva') {
+        console.log('BBVA: Immediate page reload for refresh');
+        // Remove the setTimeout delay - refresh immediately
+        window.location.reload();
+        return;
+    }
+    
+    // STP: Use the original refresh logic
+    console.log('STP: Using client-side refresh');
+    if (currentParseAccount) {
+        const parseBtn = document.getElementById(`parseBtn-${currentParseAccount}`);
+        if (parseBtn) {
+            const originalText = parseBtn.innerHTML;
+            parseBtn.innerHTML = '<i class="fas fa-sync fa-spin"></i> Updating...';
+            parseBtn.disabled = true;
+            
+            setTimeout(() => {
+                parseBtn.innerHTML = originalText;
+                parseBtn.disabled = false;
+                
+                // Only for STP: reload calendar status
+                loadCalendarParseStatus();
+                loadTrackingData();
+                loadRecordCounts();
+            }, 2000);
+        }
+    }
+}
+
+function updateFileCounts() {
+    const year = getCurrentYear();
+    
+    fetch(`${API_ENDPOINTS.calendar_status}/${year}`)
+        .then(response => response.json())
+        .then(data => {
+            Object.keys(data.calendar_data).forEach(accountNumber => {
+                const accountData = data.calendar_data[accountNumber];
+                const badge = document.querySelector(`#tab-${accountNumber} .badge`);
+                if (badge) {
+                    badge.textContent = accountData.total_files || 0;
+                }
+            });
+            
+            updateSummaryCards(data.calendar_data);
+        })
+        .catch(error => {
+            console.error('Error updating file counts:', error);
+        });
+}
+
+function updateSummaryCards(calendarData) {
+    let totalFiles = 0;
+    let completeMonths = 0;
+    let partialMonths = 0;
+    let missingMonths = 0;
+    
+    Object.values(calendarData).forEach(accountData => {
+        totalFiles += accountData.total_files || 0;
+        
+        Object.values(accountData.months).forEach(monthData => {
+            if (monthData.status === 'complete') {
+                completeMonths++;
+            } else if (monthData.status === 'partial') {
+                partialMonths++;
+            } else {
+                missingMonths++;
+            }
+        });
+    });
+    
+    animateCountUpdate('.card-title.text-success', totalFiles);
+    
+    document.querySelectorAll('.compact-card').forEach(card => {
+        const text = card.querySelector('.card-text')?.textContent;
+        const titleElement = card.querySelector('.card-title');
+        
+        if (text === 'Complete' && titleElement) {
+            animateCountUpdate(titleElement, completeMonths);
+        } else if (text === 'Partial' && titleElement) {
+            animateCountUpdate(titleElement, partialMonths);
+        } else if (text === 'Missing' && titleElement) {
+            animateCountUpdate(titleElement, missingMonths);
+        }
+    });
+}
+
+function animateCountUpdate(elementOrSelector, newValue) {
+    const element = typeof elementOrSelector === 'string' 
+        ? document.querySelector(elementOrSelector) 
+        : elementOrSelector;
+    
+    if (!element) return;
+    
+    const currentValue = parseInt(element.textContent) || 0;
+    
+    if (currentValue !== newValue) {
+        element.style.transition = 'transform 0.3s';
+        element.style.transform = 'scale(1.2)';
+        
+        setTimeout(() => {
+            element.textContent = newValue;
+            element.style.transform = 'scale(1)';
+        }, 150);
+    }
+}
+
+function showParseError(errorMessage) {
+    const parseProgress = document.getElementById('parseProgress');
+    const parseResults = document.getElementById('parseResults');
+    const parseCloseBtn = document.getElementById('parseCloseBtn');
+    
+    if (!parseResults) {
+        alert('Error: ' + errorMessage);
+        return;
+    }
+    
+    parseResults.innerHTML = `
+        <div class="alert alert-danger">
+            <h6><i class="fas fa-times-circle me-2"></i>Error</h6>
+            <p>${errorMessage}</p>
+        </div>
+    `;
+    
+    if (parseProgress) {
+        parseProgress.style.display = 'none';
+    }
+    parseResults.style.display = 'block';
+    
+    if (parseCloseBtn) {
+        parseCloseBtn.textContent = 'Close';
+    }
+}
+
+function showImmediateResult(result) {
+    const parseProgress = document.getElementById('parseProgress');
+    const parseResults = document.getElementById('parseResults');
+    const parseCloseBtn = document.getElementById('parseCloseBtn');
+    
+    if (!parseResults) {
+        alert(result.message || result.error || 'Operation completed');
+        return;
+    }
+    
+    const alertClass = result.success ? 'alert-info' : 'alert-danger';
+    const icon = result.success ? 'fa-info-circle' : 'fa-times-circle';
+    const title = result.success ? 'Parse Complete' : 'Parse Failed';
+    const message = result.message || result.error || 'Unknown result';
+    
+    parseResults.innerHTML = `
+        <div class="alert ${alertClass}">
+            <h6><i class="fas ${icon} me-2"></i>${title}</h6>
+            <p>${message}</p>
+        </div>
+    `;
+    
+    if (parseProgress) {
+        parseProgress.style.display = 'none';
+    }
+    parseResults.style.display = 'block';
+    
+    if (parseCloseBtn) {
+        parseCloseBtn.textContent = 'Close';
+    }
+}
+
+// ============================================================================
+// UPLOAD FUNCTIONALITY - DYNAMIC
+// ============================================================================
+
+// Fixed: Upload modal triggering
+function showUploadModal() {
+    const uploadModal = document.getElementById('uploadModal');
+    uploadModal.classList.add('show');
+}
+
+// Fixed: Browse button functionality
+function triggerFileUpload() {
+    const fileInput = document.getElementById('fileUpload');
+    if (fileInput) {
+        fileInput.click();
+    } else {
+        // Create a temporary file input if it doesn't exist
+        const tempInput = document.createElement('input');
+        tempInput.type = 'file';
+        tempInput.accept = '.pdf,.xlsx,.xls';
+        tempInput.multiple = true;
+        tempInput.style.display = 'none';
+        tempInput.onchange = handleFileSelect;
+        document.body.appendChild(tempInput);
+        tempInput.click();
+        document.body.removeChild(tempInput);
+    }
+}
+
+function closeUploadModal() {
+    const uploadModal = document.getElementById('uploadModal');
+    uploadModal.classList.remove('show');
+    selectedFiles = [];
+    const uploadResults = document.getElementById('uploadResults');
+    if (uploadResults) {
+        uploadResults.innerHTML = '';
+    }
+    const uploadProgress = document.getElementById('uploadProgress');
+    if (uploadProgress) {
+        uploadProgress.style.display = 'none';
+    }
+    const uploadSelectedBtn = document.getElementById('uploadSelectedBtn');
+    if (uploadSelectedBtn) {
+        uploadSelectedBtn.style.display = 'none';
+    }
+    resetDropZone();
+}
+
+function handleFileSelect(event) {
+    const files = Array.from(event.target.files);
+    processFiles(files);
+    if (event.target.value) {
+        event.target.value = '';
+    }
+}
+
+function handleDragOver(event) {
+    event.preventDefault();
+    const dropZone = document.getElementById('dropZone');
+    if (dropZone) {
+        dropZone.classList.add('dragover');
+    }
+}
+
+function handleDragLeave(event) {
+    event.preventDefault();
+    const dropZone = document.getElementById('dropZone');
+    if (dropZone) {
+        dropZone.classList.remove('dragover');
+    }
+}
+
+function handleDrop(event) {
+    event.preventDefault();
+    const dropZone = document.getElementById('dropZone');
+    if (dropZone) {
+        dropZone.classList.remove('dragover');
+    }
+    
+    const files = Array.from(event.dataTransfer.files);
+    processFiles(files);
+}
+
+function processFiles(files) {
+    const results = document.getElementById('uploadResults');
+    if (!results) return;
+    
+    results.innerHTML = '';
+    selectedFiles = [];
+    
+    if (files.length === 0) {
+        showUploadMessage('No files selected', 'warning');
+        return;
+    }
+    
+    let validFiles = 0;
+    let invalidFiles = 0;
+    
+    files.forEach((file, index) => {
+        const validation = validateFile(file);
+        
+        if (validation.valid) {
+            selectedFiles.push({
+                file: file,
+                account: validation.account,
+                accountName: validation.accountName,
+                year: validation.year,
+                month: validation.month,
+                extension: validation.extension
+            });
+            validFiles++;
+        } else {
+            invalidFiles++;
+        }
+        
+        const fileItem = createFileResultItem(file, validation, index);
+        results.appendChild(fileItem);
+    });
+    
+    const uploadSelectedBtn = document.getElementById('uploadSelectedBtn');
+    if (validFiles > 0) {
+        if (uploadSelectedBtn) {
+            uploadSelectedBtn.style.display = 'inline-block';
+        }
+        showUploadMessage(`${validFiles} valid file(s) ready to upload. ${invalidFiles > 0 ? invalidFiles + ' invalid file(s) will be skipped.' : ''}`, 'success');
+    } else {
+        showUploadMessage(`All ${invalidFiles} file(s) are invalid and cannot be uploaded.`, 'error');
+        if (uploadSelectedBtn) {
+            uploadSelectedBtn.style.display = 'none';
+        }
+    }
+}
+
+function validateFile(file) {
+    const filename = file.name;
+    const allowedExtensions = ['pdf', 'xlsx', 'xls'];
+    const extension = filename.split('.').pop().toLowerCase();
+    
+    if (!allowedExtensions.includes(extension)) {
+        return {
+            valid: false,
+            error: 'Invalid file type. Only PDF and Excel files are allowed.'
+        };
+    }
+    
+    // Dynamic file pattern based on system type
+    let pattern, accountExtractIndex;
+    
+    if (SYSTEM_TYPE === 'bbva') {
+        // BBVA: Accept any PDF file for smart detection
+        if (extension !== 'pdf') {
+            return {
+                valid: false,
+                error: 'BBVA statements must be PDF files only.'
+            };
+        }
+        
+        // For BBVA, skip pattern validation - let backend detect account
+        return {
+            valid: true,
+            account: 'auto-detect',  // Backend will determine this
+            accountName: 'Auto-detect from PDF',
+            year: 'auto-detect',
+            month: 'auto-detect',
+            extension: extension
+        };
+    } else {
+        // STP file pattern: ec-[account]-YYYYMM.ext
+        pattern = /^ec-(\d{18})-(\d{4})(\d{2})\.(pdf|xlsx|xls)$/i;
+        accountExtractIndex = 1;
+    }
+
+    const match = filename.match(pattern);
+    
+    if (!match) {
+        const expectedFormat = SYSTEM_TYPE === 'bbva' 
+            ? 'YYYYMM BBVA [AccountName].ext' 
+            : 'ec-[account]-YYYYMM.ext';
+        return {
+            valid: false,
+            error: `Invalid filename format. Expected: ${expectedFormat}`
+        };
+    }
+    
+    let account, year, month, fileExtension;
+    
+    if (SYSTEM_TYPE === 'bbva') {
+        year = match[1];
+        month = match[2];
+        const accountName = match[3];
+        fileExtension = match[4].toLowerCase();
+        
+        // Find BBVA account by name
+        account = Object.keys(VALID_ACCOUNTS).find(clabe => 
+            VALID_ACCOUNTS[clabe].toLowerCase().includes(accountName.toLowerCase())
+        );
+        
+        if (!account) {
+            return {
+                valid: false,
+                error: `Invalid BBVA account name: ${accountName}`
+            };
+        }
+    } else {
+        account = match[1];
+        year = match[2];
+        month = match[3];
+        fileExtension = match[4].toLowerCase();
+    }
+    
+    if (!VALID_ACCOUNTS[account]) {
+        return {
+            valid: false,
+            error: `Invalid account: ${account}`
+        };
+    }
+    
+    const monthNum = parseInt(month);
+    if (monthNum < 1 || monthNum > 12) {
+        return {
+            valid: false,
+            error: `Invalid month: ${month}. Must be 01-12.`
+        };
+    }
+    
+    return {
+        valid: true,
+        account: account,
+        accountName: VALID_ACCOUNTS[account],
+        year: year,
+        month: month,
+        extension: fileExtension
+    };
+}
+
+function createFileResultItem(file, validation, index) {
+    const item = document.createElement('div');
+    item.className = `alert ${validation.valid ? 'alert-success' : 'alert-danger'} py-2 mb-2`;
+    
+    const icon = validation.valid ? 'fa-check-circle text-success' : 'fa-times-circle text-danger';
+    const status = validation.valid ? 'Valid' : 'Invalid';
+    
+    let details = '';
+    if (validation.valid) {
+        details = `<small class="d-block">Account: ${validation.accountName} | ${validation.year}-${validation.month} | ${validation.extension.toUpperCase()}</small>`;
+    } else {
+        details = `<small class="d-block text-danger">${validation.error}</small>`;
+    }
+    
+    item.innerHTML = `
+        <div class="d-flex align-items-center">
+            <i class="fas ${icon} me-2"></i>
+            <div class="flex-grow-1">
+                <strong>${file.name}</strong> - ${status}
+                ${details}
+            </div>
+        </div>
+    `;
+    
+    return item;
+}
+
+async function uploadSelectedFiles() {
+    if (selectedFiles.length === 0) {
+        showUploadMessage('No valid files to upload', 'warning');
+        return;
+    }
+    
+    const progressContainer = document.getElementById('uploadProgress');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    const uploadBtn = document.getElementById('uploadSelectedBtn');
+    
+    if (progressContainer) progressContainer.style.display = 'block';
+    if (uploadBtn) {
+        uploadBtn.disabled = true;
+        uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+    }
+    
+    let uploaded = 0;
+    let failed = 0;
+    
+    for (let i = 0; i < selectedFiles.length; i++) {
+        const fileData = selectedFiles[i];
+        if (progressText) {
+            progressText.textContent = `Uploading ${fileData.file.name}... (${i + 1}/${selectedFiles.length})`;
+        }
+        if (progressBar) {
+            progressBar.style.width = `${(i / selectedFiles.length) * 100}%`;
+        }
+        
+        try {
+            const success = await uploadSingleFile(fileData);
+            if (success) {
+                uploaded++;
+            } else {
+                failed++;
+            }
+        } catch (error) {
+            console.error('Upload error:', error);
+            failed++;
+        }
+    }
+    
+    if (progressBar) progressBar.style.width = '100%';
+    if (progressText) {
+        progressText.textContent = `Upload complete: ${uploaded} successful, ${failed} failed`;
+    }
+    
+    if (uploadBtn) {
+        uploadBtn.disabled = false;
+        uploadBtn.innerHTML = '<i class="fas fa-upload"></i> Upload Selected';
+    }
+    
+    if (uploaded > 0) {
+        showUploadMessage(`Successfully uploaded ${uploaded} file(s).${failed > 0 ? ` ${failed} file(s) failed.` : ''}`, 'success');
+        setTimeout(() => {
+            window.location.reload();
+        }, 2000);
+    } else {
+        showUploadMessage(`All uploads failed. Please try again.`, 'error');
+    }
+}
+
+async function uploadSingleFile(fileData) {
+    const formData = new FormData();
+    formData.append('file', fileData.file);
+    formData.append('account', fileData.account);
+    formData.append('year', fileData.year);
+    formData.append('month', fileData.month);
+    
+    try {
+        const response = await fetch(API_ENDPOINTS.upload, {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (response.ok) {
+            // SUCCESS CASE
+            const result = await response.json();
+            
+            if (result.success) {
+                // Show success message in upload results
+                const uploadResults = document.getElementById('uploadResults');
+                if (uploadResults) {
+                    const successDiv = document.createElement('div');
+                    successDiv.className = 'alert alert-success py-2 mb-2';
+                    successDiv.innerHTML = `
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            <div class="flex-grow-1">
+                                <strong>${fileData.file.name}</strong> - Uploaded Successfully
+                                <small class="d-block">${result.message}</small>
+                            </div>
+                        </div>
+                    `;
+                    uploadResults.appendChild(successDiv);
+                }
+                
+                showToast(result.message || 'File uploaded successfully!', 'success');
+            }
+            
+            return result.success;
+            
+        } else if (response.status === 409) {
+            // CONFLICT CASE - Handle file conflict
+            try {
+                const conflictData = await response.json();
+                
+                if (conflictData.conflict) {
+                    // Show conflict resolution modal
+                    return await handleFileConflict(fileData, conflictData);
+                } else {
+                    // Regular error with 409 status
+                    showUploadError(fileData, conflictData.error, conflictData.details);
+                    return false;
+                }
+                
+            } catch (jsonError) {
+                console.error('Failed to parse conflict response:', jsonError);
+                showUploadError(fileData, 'Upload conflict occurred', 'Unable to parse server response');
+                return false;
+            }
+            
+        } else {
+            // OTHER ERROR CASES
+            try {
+                const errorData = await response.json();
+                const errorMessage = errorData.error || 'Upload failed';
+                const errorDetails = errorData.details || '';
+                
+                showUploadError(fileData, errorMessage, errorDetails);
+                return false;
+                
+            } catch (jsonError) {
+                console.error('Failed to parse error response:', jsonError);
+                showUploadError(fileData, `Upload failed: ${response.status} ${response.statusText}`, '');
+                return false;
+            }
+        }
+    } catch (error) {
+        console.error('Upload network error:', error);
+        showUploadError(fileData, 'Upload failed: Network error', error.message);
+        return false;
+    }
+}
+
+// NEW: Handle file conflict with modal
+async function handleFileConflict(fileData, conflictData) {
+    return new Promise((resolve) => {
+        // Populate conflict modal with data
+        populateConflictModal(fileData, conflictData);
+        
+        // Show conflict modal
+        const conflictModal = new bootstrap.Modal(document.getElementById('fileConflictModal'));
+        conflictModal.show();
+        
+        // Handle resolution button click
+        const resolveBtn = document.getElementById('resolveConflictBtn');
+        const newResolveBtn = resolveBtn.cloneNode(true);
+        resolveBtn.parentNode.replaceChild(newResolveBtn, resolveBtn);
+        
+        newResolveBtn.addEventListener('click', async () => {
+            const resolution = document.querySelector('input[name="conflictResolution"]:checked').value;
+            
+            switch (resolution) {
+                case 'overwrite':
+                    // Upload with force overwrite
+                    const overwriteResult = await uploadWithOverwrite(fileData);
+                    conflictModal.hide();
+                    resolve(overwriteResult);
+                    break;
+                    
+                case 'rename':
+                    // Upload with custom filename
+                    const customFilename = document.getElementById('customFilename').value.trim();
+                    if (!customFilename) {
+                        showToast('Please enter a new filename', 'warning');
+                        return;
+                    }
+                    const renameResult = await uploadWithRename(fileData, customFilename + '.pdf');
+                    conflictModal.hide();
+                    resolve(renameResult);
+                    break;
+                    
+                case 'cancel':
+                    // Cancel upload
+                    conflictModal.hide();
+                    showUploadError(fileData, 'Upload cancelled', 'User chose to keep existing file');
+                    resolve(false);
+                    break;
+            }
+        });
+        
+        // Handle modal close without resolution
+        document.getElementById('fileConflictModal').addEventListener('hidden.bs.modal', () => {
+            resolve(false);
+        }, { once: true });
+    });
+}
+
+// NEW: Populate conflict modal with file details
+function populateConflictModal(fileData, conflictData) {
+    // New file details
+    document.getElementById('newFileName').textContent = conflictData.suggested_filename || fileData.file.name;
+    document.getElementById('newFileSize').textContent = formatFileSize(fileData.file.size);
+    document.getElementById('newFileAccount').textContent = fileData.accountName || fileData.account;
+    document.getElementById('newFilePeriod').textContent = `${fileData.year}-${fileData.month}`;
+    
+    // Existing file details
+    const existingFile = conflictData.existing_file;
+    if (existingFile) {
+        document.getElementById('existingFileName').textContent = existingFile.filename || conflictData.suggested_filename;
+        document.getElementById('existingFileSize').textContent = existingFile.size_formatted || 'Unknown';
+        document.getElementById('existingFileDate').textContent = existingFile.last_modified_formatted || 'Unknown';
+        
+        // Set download link if available
+        const downloadLink = document.getElementById('existingFileDownload');
+        if (existingFile.download_url) {
+            downloadLink.href = existingFile.download_url;
+            downloadLink.style.display = 'inline';
+        } else {
+            downloadLink.style.display = 'none';
+        }
+    }
+    
+    // Set suggested custom filename
+    const customFilenameInput = document.getElementById('customFilename');
+    const baseName = (conflictData.suggested_filename || fileData.file.name).replace('.pdf', '');
+    customFilenameInput.value = baseName + '_v2';
+}
+
+// NEW: Upload with force overwrite
+async function uploadWithOverwrite(fileData) {
+    const formData = new FormData();
+    formData.append('file', fileData.file);
+    formData.append('account', fileData.account);
+    formData.append('year', fileData.year);
+    formData.append('month', fileData.month);
+    formData.append('force_overwrite', 'true'); // Add overwrite flag
+    
+    try {
+        const response = await fetch(API_ENDPOINTS.upload, {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+                showToast('File replaced successfully!', 'success');
+                showUploadSuccess(fileData, result.message + ' (Replaced existing file)');
+                return true;
+            }
+        }
+        
+        const errorData = await response.json();
+        showUploadError(fileData, errorData.error || 'Overwrite failed', errorData.details || '');
+        return false;
+        
+    } catch (error) {
+        showUploadError(fileData, 'Overwrite failed', error.message);
+        return false;
+    }
+}
+
+// NEW: Upload with custom filename
+async function uploadWithRename(fileData, newFilename) {
+    const formData = new FormData();
+    formData.append('file', fileData.file);
+    formData.append('account', fileData.account);
+    formData.append('year', fileData.year);
+    formData.append('month', fileData.month);
+    formData.append('custom_filename', newFilename); // Add custom filename
+    
+    try {
+        const response = await fetch(API_ENDPOINTS.upload, {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+                showToast(`File uploaded as ${newFilename}!`, 'success');
+                showUploadSuccess(fileData, result.message + ` (Saved as ${newFilename})`);
+                return true;
+            }
+        }
+        
+        const errorData = await response.json();
+        showUploadError(fileData, errorData.error || 'Rename upload failed', errorData.details || '');
+        return false;
+        
+    } catch (error) {
+        showUploadError(fileData, 'Rename upload failed', error.message);
+        return false;
+    }
+}
+
+// HELPER: Show upload success message
+function showUploadSuccess(fileData, message) {
+    const uploadResults = document.getElementById('uploadResults');
+    if (uploadResults) {
+        const successDiv = document.createElement('div');
+        successDiv.className = 'alert alert-success py-2 mb-2';
+        successDiv.innerHTML = `
+            <div class="d-flex align-items-center">
+                <i class="fas fa-check-circle text-success me-2"></i>
+                <div class="flex-grow-1">
+                    <strong>${fileData.file.name}</strong> - Upload Complete
+                    <small class="d-block">${message}</small>
+                </div>
+            </div>
+        `;
+        uploadResults.appendChild(successDiv);
+    }
+}
+
+// HELPER: Show upload error message
+function showUploadError(fileData, errorMessage, errorDetails) {
+    const uploadResults = document.getElementById('uploadResults');
+    if (uploadResults) {
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'alert alert-danger py-2 mb-2';
+        errorDiv.innerHTML = `
+            <div class="d-flex align-items-center">
+                <i class="fas fa-times-circle text-danger me-2"></i>
+                <div class="flex-grow-1">
+                    <strong>${fileData.file.name}</strong> - Upload Failed
+                    <small class="d-block"><strong>Error:</strong> ${errorMessage}</small>
+                    ${errorDetails ? `<small class="d-block text-muted">${errorDetails}</small>` : ''}
+                </div>
+            </div>
+        `;
+        uploadResults.appendChild(errorDiv);
+    }
+    
+    showToast(`${errorMessage}${errorDetails ? ': ' + errorDetails : ''}`, 'error');
+}
+
+// HELPER: Format file size
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function showUploadMessage(message, type) {
+    const dropZone = document.getElementById('dropZone');
+    if (dropZone) {
+        dropZone.className = `upload-drop-zone ${type}`;
+        
+        setTimeout(() => {
+            resetDropZone();
+        }, 3000);
+    }
+}
+
+function resetDropZone() {
+    const dropZone = document.getElementById('dropZone');
+    if (dropZone) {
+        dropZone.className = 'upload-drop-zone';
+    }
+}
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+function downloadFile(url, filename) {
+    if (url && url !== '#') {
+        showToast(`Downloading ${filename}...`, 'info');
+        window.location.href = url;
+        
+        setTimeout(() => {
+            showToast(`${filename} download started!`, 'success');
+        }, 1000);
+    } else {
+        showToast('File not available for download', 'warning');
+    }
+}
+
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-white bg-${type} border-0`;
+    toast.setAttribute('role', 'alert');
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">${message}</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    
+    let container = document.querySelector('.toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+        document.body.appendChild(container);
+    }
+    
+    container.appendChild(toast);
+    const bsToast = new bootstrap.Toast(toast);
+    bsToast.show();
+    
+    toast.addEventListener('hidden.bs.toast', () => toast.remove());
+}
+
+// ============================================================================
+// PAGE LOAD - BBVA OPTIMIZED (SINGLE SOURCE OF TRUTH)
+// ============================================================================
+
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Page loaded for system:', SYSTEM_TYPE);
+    console.log('Valid accounts:', VALID_ACCOUNTS);
+    console.log('API endpoints:', API_ENDPOINTS);
+    
+    if (SYSTEM_TYPE === 'bbva') {
+        console.log('BBVA System: Complete protection mode - NO client-side overrides');
+        
+        // STEP 1: Immediately protect all existing parsed icons
+        setTimeout(() => {
+            protectBBVAIconColors();
+        }, 100);
+        
+        // STEP 2: Disable ALL functions that could change colors
+        disableBBVAOverrideFunctions();
+        
+        // STEP 3: DO NOT call ANY client-side API functions for BBVA
+        // This is the KEY FIX - completely skip all API calls
+        console.log('BBVA: Skipping ALL client-side API calls to preserve server data');
+        
+    } else {
+        console.log('STP System: Using hybrid client-server approach');
+        // For STP: Keep existing behavior
+        loadCalendarParseStatus();
+        loadTrackingData();
+        loadRecordCounts();
+    }
+
+    // Modal cleanup for both systems
+    const parseModal = document.getElementById('parseModal');
+    if (parseModal) {
+        parseModal.addEventListener('hidden.bs.modal', function () {
+            console.log('Parse modal closed, cleaning up for system:', SYSTEM_TYPE);
+            
+            if (parseProgressInterval) {
+                clearInterval(parseProgressInterval);
+                parseProgressInterval = null;
+            }
+            
+            currentParseSession = null;
+            
+            // System-aware cleanup with IMMEDIATE refresh for BBVA
+            if (SYSTEM_TYPE === 'bbva') {
+                console.log('BBVA: Modal closed, immediate page reload');
+                // NO setTimeout delay - refresh immediately
+                window.location.reload();
+            } else {
+                console.log('STP: Modal closed, using JavaScript refresh');
+                refreshCalendarStatus();
+            }
+        });
+    }
+});
+
+// STP-specific function for loading parse status
+async function loadCalendarParseStatus() {
+    try {
+        console.log('Loading STP calendar parse status...');
+        const year = getCurrentYear();
+        const response = await fetch(`${API_ENDPOINTS.calendar_status}/${year}`);
+        
+        if (response.ok) {
+            const data = await response.json();
+            console.log('STP parse status loaded:', data);
+            // Update calendar visual status with STP data
+            updateCalendarParseStatus(data.calendar_data);
+        } else {
+            console.warn('Failed to load STP parse status:', response.status);
+        }
+    } catch (error) {
+        console.error('Error loading STP parse status:', error);
+    }
+}
+
+// STP-specific function to update calendar parse status
+function updateCalendarParseStatus(calendarData) {
+    console.log('Updating STP calendar parse status with:', calendarData);
+    
+    Object.keys(calendarData).forEach(accountNumber => {
+        const accountData = calendarData[accountNumber];
+        
+        Object.keys(accountData.months).forEach(monthKey => {
+            const monthData = accountData.months[monthKey];
+            const parseStatus = monthData.parse_status || 'not_parsed';
+            
+            const monthSquares = document.querySelectorAll(`[data-month="${monthKey}"][data-account="${accountNumber}"]`);
+            monthSquares.forEach(square => {
+                // Update CSS classes for visual consistency
+                square.classList.remove('parse-status-parsed', 'parse-status-different_format', 'parse-status-parse_error', 'parse-status-not_parsed');
+                square.classList.add(`parse-status-${parseStatus}`);
+                
+                // Update icon classes 
+                const parseIndicator = square.querySelector('.parse-indicator-with-count');
+                if (parseIndicator) {
+                    const iconElement = parseIndicator.querySelector('i');
+                    if (iconElement) {
+                        let iconClass = 'fas fa-database';
+                        let title = 'Not parsed yet';
+                        
+                        switch (parseStatus) {
+                            case 'parsed':
+                                iconClass = 'fas fa-database parse-icon-parsed';
+                                const transactionCount = monthData.transaction_count || 0;
+                                title = `Parsed: ${transactionCount} transactions`;
+                                break;
+                            case 'different_format':
+                                iconClass = 'fas fa-exclamation-triangle parse-icon-different';
+                                title = 'Different file format';
+                                break;
+                            case 'parse_error':
+                                iconClass = 'fas fa-times-circle parse-icon-error';
+                                title = 'Parse error';
+                                break;
+                            default:
+                                iconClass = 'fas fa-database';
+                                title = 'Not parsed yet';
+                                break;
+                        }
+                        
+                        iconElement.className = iconClass;
+                        iconElement.setAttribute('title', title);
+                    }
+                }
+            });
+        });
+    });
+}
+
+// Visual-only updates for BBVA (preserves server transaction counts)
+
+function updateCalendarVisualStatusOnly(calendarData) {
+    if (SYSTEM_TYPE === 'bbva') {
+        console.log('BBVA: updateCalendarVisualStatusOnly skipped to preserve server colors');
+        return; // Exit immediately for BBVA
+    }
+    
+    Object.keys(calendarData).forEach(accountNumber => {
+        const accountData = calendarData[accountNumber];
+        
+        Object.keys(accountData.months).forEach(monthKey => {
+            const monthData = accountData.months[monthKey];
+            const parseStatus = monthData.parse_status || 'not_parsed';
+            
+            const monthSquares = document.querySelectorAll(`[data-month="${monthKey}"][data-account="${accountNumber}"]`);
+            monthSquares.forEach(square => {
+                // Update CSS classes for visual consistency
+                square.classList.remove('parse-status-parsed', 'parse-status-different_format', 'parse-status-parse_error', 'parse-status-not_parsed');
+                square.classList.add(`parse-status-${parseStatus}`);
+                
+                // Update icon classes but PRESERVE colors for BBVA
+                const parseIndicator = square.querySelector('.parse-indicator-with-count');
+                if (parseIndicator) {
+                    const iconElement = parseIndicator.querySelector('i');
+                    if (iconElement) {
+                        let iconClass = 'fas fa-database';
+                        let title = 'Not parsed yet';
+                        
+                        switch (parseStatus) {
+                            case 'parsed':
+                                iconClass = 'fas fa-database parse-icon-parsed';
+                                title = 'Data parsed into database';
+                                break;
+                            case 'different_format':
+                                iconClass = 'fas fa-exclamation-triangle parse-icon-different';
+                                title = 'Different file format';
+                                break;
+                            case 'parse_error':
+                                iconClass = 'fas fa-times-circle parse-icon-error';
+                                title = 'Parse error';
+                                break;
+                        }
+                        
+                        iconElement.className = iconClass;
+                        iconElement.setAttribute('title', title);
+                        
+                        // CRITICAL: Force blue color for parsed icons in BBVA
+                        if (parseStatus === 'parsed') {
+                            iconElement.style.setProperty('color', '#0066cc', 'important');
+                            console.log('BBVA: Enforced blue color for parsed icon');
+                        }
+                        
+                        // Remove any other inline styles that might interfere
+                        const currentStyle = iconElement.getAttribute('style');
+                        if (currentStyle && !currentStyle.includes('color: #0066cc')) {
+                            iconElement.removeAttribute('style');
+                            if (parseStatus === 'parsed') {
+                                iconElement.style.setProperty('color', '#0066cc', 'important');
+                            }
+                        }
+                    }
+                    
+                    // PRESERVE existing transaction count (don't overwrite server data)
+                    const recordCountElement = parseIndicator.querySelector('.record-count');
+                    if (recordCountElement) {
+                        console.log(`BBVA: Preserving server transaction count for ${accountNumber}/${monthKey}: ${recordCountElement.textContent}`);
+                    }
+                }
+            });
+        });
+    });
+}
+
+// NEW FUNCTION: Protect BBVA icon colors from any JavaScript changes
+function protectBBVAIconColors() {
+    if (SYSTEM_TYPE !== 'bbva') return;
+    
+    console.log('BBVA: Protecting blue icon colors from JavaScript overrides');
+    
+    // Find all parsed icons and lock their colors
+    const parsedIcons = document.querySelectorAll('.parse-icon-parsed');
+    parsedIcons.forEach(icon => {
+        // Force blue color and prevent any changes
+        icon.style.setProperty('color', '#0066cc', 'important');
+        
+        // Create a MutationObserver to prevent style changes
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+                    const currentColor = icon.style.color;
+                    if (currentColor !== 'rgb(0, 102, 204)' && currentColor !== '#0066cc') {
+                        console.log('BBVA: Preventing icon color change, restoring blue');
+                        icon.style.setProperty('color', '#0066cc', 'important');
+                    }
+                }
+            });
+        });
+        
+        observer.observe(icon, {
+            attributes: true,
+            attributeFilter: ['style', 'class']
+        });
+    });
+    
+    console.log(`BBVA: Protected ${parsedIcons.length} parsed icons from color changes`);
+}
+
+// NEW FUNCTION: Enhanced protection for BBVA icons
+function protectBBVAIconColors() {
+    if (SYSTEM_TYPE !== 'bbva') return;
+    
+    console.log('BBVA: Activating comprehensive icon color protection');
+    
+    // Find all database icons and protect them
+    const allDbIcons = document.querySelectorAll('.fas.fa-database');
+    console.log(`BBVA: Found ${allDbIcons.length} database icons`);
+    
+    allDbIcons.forEach((icon, index) => {
+        // Check if this icon should be blue (has parse-icon-parsed class or is already blue)
+        const hasParseClass = icon.classList.contains('parse-icon-parsed');
+        const isBlue = icon.style.color === 'rgb(0, 102, 204)' || icon.style.color === '#0066cc';
+        const computedColor = window.getComputedStyle(icon).color;
+        
+        if (hasParseClass || isBlue || computedColor === 'rgb(0, 102, 204)') {
+            console.log(`BBVA: Protecting blue icon ${index + 1}`);
+            
+            // Force and lock blue color
+            icon.style.setProperty('color', '#0066cc', 'important');
+            icon.classList.add('parse-icon-parsed');
+            
+            // Create observer to prevent ANY changes
+            const observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    if (mutation.type === 'attributes') {
+                        // Always force blue color for parsed icons
+                        if (icon.classList.contains('parse-icon-parsed')) {
+                            const currentColor = icon.style.color;
+                            if (currentColor !== 'rgb(0, 102, 204)' && currentColor !== '#0066cc') {
+                                console.warn(`BBVA: Icon color changed to ${currentColor}, forcing back to blue`);
+                                icon.style.setProperty('color', '#0066cc', 'important');
+                            }
+                        }
+                        
+                        // Ensure parse-icon-parsed class stays
+                        if (hasParseClass && !icon.classList.contains('parse-icon-parsed')) {
+                            console.warn('BBVA: parse-icon-parsed class removed, restoring');
+                            icon.classList.add('parse-icon-parsed');
+                            icon.style.setProperty('color', '#0066cc', 'important');
+                        }
+                    }
+                });
+            });
+            
+            observer.observe(icon, {
+                attributes: true,
+                attributeFilter: ['style', 'class']
+            });
+        }
+    });
+    
+    console.log('BBVA: Icon protection activated');
+}
+
+// NEW FUNCTION: Completely disable override functions for BBVA
+function disableBBVAOverrideFunctions() {
+    if (SYSTEM_TYPE !== 'bbva') return;
+    
+    console.log('BBVA: Disabling ALL override functions');
+    
+    // Disable updateRecordCountsDisplay
+    window.updateRecordCountsDisplay = function(recordCounts) {
+        console.log('BBVA: updateRecordCountsDisplay blocked');
+        return;
+    };
+    
+    // Disable loadRecordCounts  
+    window.loadRecordCounts = function() {
+        console.log('BBVA: loadRecordCounts blocked');
+        return Promise.resolve();
+    };
+    
+    // Disable loadTrackingData
+    window.loadTrackingData = function() {
+        console.log('BBVA: loadTrackingData blocked');
+        return Promise.resolve();
+    };
+    
+    // CRITICAL: Disable updateCalendarVisualStatusOnly completely
+    window.updateCalendarVisualStatusOnly = function(calendarData) {
+        console.log('BBVA: updateCalendarVisualStatusOnly blocked - this was causing the color changes!');
+        return;
+    };
+    
+    // Disable loadCalendarParseStatusBBVA
+    window.loadCalendarParseStatusBBVA = function() {
+        console.log('BBVA: loadCalendarParseStatusBBVA blocked');
+        return Promise.resolve();
+    };
+    
+    // Disable any other functions that modify icons
+    window.updateCalendarParseStatus = function(calendarData) {
+        if (SYSTEM_TYPE === 'bbva') {
+            console.log('BBVA: updateCalendarParseStatus blocked');
+            return;
+        }
+        // For STP, call the original function if it exists
+        if (window.originalUpdateCalendarParseStatus) {
+            return window.originalUpdateCalendarParseStatus.call(this, calendarData);
+        }
+    };
+    
+    console.log('BBVA: All override functions disabled');
+}
+
+// ============================================================================
+// REFRESH CALENDAR FUNCTIONALITY
+// ============================================================================
+
+function refreshCalendar() {
+    const refreshBtn = document.getElementById('refreshCalendarBtn');
+    const originalHTML = refreshBtn ? refreshBtn.innerHTML : '';
+    
+    if (refreshBtn) {
+        refreshBtn.disabled = true;
+        refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing...';
+    }
+    
+    if (SYSTEM_TYPE === 'bbva') {
+        console.log('BBVA: Manual refresh - clearing cache and reloading page');
+        fetch('/api/refresh-calendar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast(`Calendar refreshed! Cleared ${data.cache_entries_cleared} cache entries.`, 'success');
+                setTimeout(() => {
+                    window.location.reload(); // Full page reload for BBVA
+                }, 1000);
+            } else {
+                showToast('Failed to refresh calendar: ' + (data.error || 'Unknown error'), 'error');
+                if (refreshBtn) {
+                    refreshBtn.disabled = false;
+                    refreshBtn.innerHTML = originalHTML;
+                }
+            }
+        })
+        .catch(error => {
+            console.error('BBVA refresh error:', error);
+            showToast('Failed to refresh calendar. Please try again.', 'error');
+            if (refreshBtn) {
+                refreshBtn.disabled = false;
+                refreshBtn.innerHTML = originalHTML;
+            }
+        });
+    } else {
+        console.log('STP: Manual refresh - using client-side updates');
+        fetch('/api/refresh-calendar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast(`Calendar refreshed! Cleared ${data.cache_entries_cleared} cache entries.`, 'success');
+                
+                // For STP: Update via JavaScript
+                loadCalendarParseStatus();
+                loadTrackingData(); 
+                loadRecordCounts();
+            } else {
+                showToast('Failed to refresh calendar: ' + (data.error || 'Unknown error'), 'error');
+            }
+        })
+        .catch(error => {
+            console.error('STP refresh error:', error);
+            showToast('Failed to refresh calendar. Please try again.', 'error');
+        })
+        .finally(() => {
+            if (refreshBtn) {
+                refreshBtn.disabled = false;
+                refreshBtn.innerHTML = originalHTML;
+            }
+        });
+    }
+}
+
+</script>

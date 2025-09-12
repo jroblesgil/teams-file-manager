@@ -1,0 +1,3 @@
+"""
+STP module package
+"""

@@ -1,0 +1,61 @@
+<!-- templates/stp_components/modals/upload_modal.html -->
+<div class="upload-modal" id="uploadModal">
+    <div class="upload-modal-content">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            {% if system_type == 'bbva' %}
+                <h5 class="mb-0">Upload BBVA PDF Files</h5>
+            {% else %}
+                <h5 class="mb-0">Upload STP Files</h5>
+            {% endif %}
+            <button type="button" class="btn-close" onclick="closeUploadModal()"></button>
+        </div>
+        
+        <!-- Hidden file input for browse functionality -->
+        {% if system_type == 'bbva' %}
+            <input type="file" id="fileUpload" accept=".pdf" multiple style="display: none;" onchange="handleFileSelect(event)">
+        {% else %}
+            <input type="file" id="fileUpload" accept=".pdf,.xlsx,.xls" multiple style="display: none;" onchange="handleFileSelect(event)">
+        {% endif %}
+        
+        <!-- Drop Zone -->
+        <div class="upload-drop-zone" id="dropZone" 
+             ondrop="handleDrop(event)" 
+             ondragover="handleDragOver(event)" 
+             ondragleave="handleDragLeave(event)">
+            <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-2"></i>
+            
+            {% if system_type == 'bbva' %}
+                <p class="mb-2">Drop BBVA PDF files here or click to browse</p>
+                <p class="small text-muted mb-2">Supported format: PDF only</p>
+                <p class="small text-muted">BBVA bank statements will be auto-detected and organized</p>
+            {% else %}
+                <p class="mb-2">Drop STP files here or click to browse</p>
+                <p class="small text-muted mb-2">Supported formats: PDF, Excel (.xlsx, .xls)</p>
+                <p class="small text-muted">Files must follow naming convention: ec-[account]-YYYYMM.ext</p>
+            {% endif %}
+            
+            <button class="btn btn-outline-primary btn-sm" onclick="triggerFileUpload()">
+                <i class="fas fa-folder-open"></i> Browse Files
+            </button>
+        </div>
+        
+        <!-- Upload Progress -->
+        <div id="uploadProgress" style="display: none;">
+            <div class="progress mb-2">
+                <div class="progress-bar" id="progressBar" role="progressbar" style="width: 0%"></div>
+            </div>
+            <div class="small text-muted" id="progressText">Uploading...</div>
+        </div>
+        
+        <!-- Upload Results -->
+        <div id="uploadResults"></div>
+        
+        <!-- Actions -->
+        <div class="d-flex justify-content-end gap-2 mt-3">
+            <button class="btn btn-secondary btn-sm" onclick="closeUploadModal()">Close</button>
+            <button class="btn btn-primary btn-sm" id="uploadSelectedBtn" onclick="uploadSelectedFiles()" style="display: none;">
+                <i class="fas fa-upload"></i> Upload Selected
+            </button>
+        </div>
+    </div>
+</div>

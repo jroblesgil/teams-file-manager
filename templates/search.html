@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}Search Files - Teams File Manager{% endblock %}
+
+{% block content %}
+<!-- Search Form -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="fas fa-search"></i> Search Files
+                </h5>
+                <form method="GET" action="{{ url_for('search') }}">
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            <input type="text" 
+                                   class="form-control" 
+                                   name="q" 
+                                   value="{{ query }}" 
+                                   placeholder="Enter search terms..."
+                                   required>
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="fas fa-search"></i> Search
+                            </button>
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            <a href="{{ url_for('search') }}" class="btn btn-outline-secondary w-100">
+                                <i class="fas fa-times"></i> Clear
+                            </a>
+                        </div>
+                    </div>
+                    {% if team_id %}
+                    <input type="hidden" name="team_id" value="{{ team_id }}">
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Search Results -->
+{% if query %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-file-alt"></i> Search Results
+                    {% if files %}
+                        <span class="badge bg-success ms-2">{{ files|length }} found</span>
+                    {% endif %}
+                </h5>
+                <small class="text-muted">Searching for: "{{ query }}"</small>
+            </div>
+            <div class="card-body">
+                {% if files %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Type</th>
+                                    <th>Size</th>
+                                    <th>Modified</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for file in files %}
+                                <tr>
+                                    <td>
+                                        <i class="fas {{ 'fa-folder' if file.folder else 'fa-file' }} text-primary me-2"></i>
+                                        {{ file.name }}
+                                    </td>
+                                    <td>
+                                        {% if file.folder %}
+                                            <span class="badge bg-secondary">Folder</span>
+                                        {% else %}
+                                            <span class="badge bg-info">
+                                                {{ file.name.split('.')[-1].upper() if '.' in file.name else 'File' }}
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if file.size %}
+                                            {{ (file.size / 1024 / 1024) | round(2) }} MB
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if file.lastModifiedDateTime %}
+                                            {{ file.lastModifiedDateTime[:10] }}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if not file.folder %}
+                                            <a href="{{ url_for('download_file', drive_id=file.parentReference.driveId, file_id=file.id) }}" 
+                                               class="btn btn-sm btn-primary">
+                                                <i class="fas fa-download"></i>
+                                            </a>
+                                        {% endif %}
+                                        {% if file.webUrl %}
+                                            <a href="{{ file.webUrl }}" 
+                                               target="_blank" 
+                                               class="btn btn-sm btn-outline-secondary">
+                                                <i class="fas fa-external-link-alt"></i>
+                                            </a>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">No Results Found</h5>
+                        <p class="text-muted">Try different search terms or check your spelling.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

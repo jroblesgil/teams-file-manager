@@ -1,0 +1,792 @@
+<!-- BBVA-Specific JavaScript -->
+<script>
+// BBVA Account Configuration
+const BBVA_ACCOUNTS = {
+    'bbva_mx_mxn': {
+        name: 'BBVA MX MXN',
+        clabe: '012180001198203451',
+        directory: 'BBVA MX/BBVA MX MXN',
+        file_pattern: 'FMX BBVA MXN',
+        database: 'BBVA_MX_mxn_DB.json'
+    },
+    'bbva_mx_usd': {
+        name: 'BBVA MX USD',
+        clabe: '012180001201205883',
+        directory: 'BBVA MX/BBVA MX USD',
+        file_pattern: 'FMX BBVA USD',
+        database: 'BBVA_MX_usd_DB.json'
+    },
+    'bbva_sa_mxn': {
+        name: 'BBVA SA MXN',
+        clabe: '012180001182790637',
+        directory: 'BBVA SA/BBVA SA MXN',
+        file_pattern: 'FSA BBVA MXN',
+        database: 'BBVA_SA_mxn_DB.json'
+    },
+    'bbva_sa_usd': {
+        name: 'BBVA SA USD',
+        clabe: '012222001182793149',
+        directory: 'BBVA SA/BBVA SA USD',
+        file_pattern: 'FSA BBVA USD',
+        database: 'BBVA_SA_usd_DB.json'
+    },
+    'bbva_ip_clientes': {
+        name: 'BBVA IP Clientes',
+        clabe: '012180001232011635',
+        directory: 'BBVA IP/BBVA IP MXN Clientes',
+        file_pattern: 'BBVA IP MXN Clientes',
+        database: 'BBVA_IP_clientes_DB.json'
+    },
+    'bbva_ip_corp': {
+        name: 'BBVA IP Corp',
+        clabe: '012180001232011554',
+        directory: 'BBVA IP/BBVA IP MXN Corp',
+        file_pattern: 'BBVA IP MXN Corp',
+        database: 'BBVA_IP_corp_DB.json'
+    }
+};
+
+// Global variables
+let currentBbvaAccount = 'bbva_mx_mxn';
+let currentYear = new Date().getFullYear();
+let isLoading = false;
+
+// Initialize BBVA Calendar
+function initializeBbvaCalendar() {
+    console.log('Initializing BBVA Calendar...');
+    
+    // Set up event listeners
+    setupEventListeners();
+    
+    // Load initial data
+    const urlParams = new URLSearchParams(window.location.search);
+    const accountParam = urlParams.get('account') || 'bbva_mx_mxn';
+    const yearParam = urlParams.get('year') || currentYear;
+    
+    currentYear = parseInt(yearParam);
+    updateYearDisplay();
+    
+    loadAccountData(accountParam);
+}
+
+// Set up event listeners
+function setupEventListeners() {
+    // Year navigation
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.year-prev')) {
+            changeYear(-1);
+        } else if (e.target.closest('.year-next')) {
+            changeYear(1);
+        }
+    });
+    
+    // Keyboard navigation
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'ArrowLeft' && e.ctrlKey) {
+            changeYear(-1);
+        } else if (e.key === 'ArrowRight' && e.ctrlKey) {
+            changeYear(1);
+        }
+    });
+}
+
+// Load account data
+async function loadAccountData(accountType) {
+    if (isLoading) return;
+    
+    try {
+        isLoading = true;
+        currentBbvaAccount = accountType;
+        
+        showLoadingState();
+        
+        // Fetch account data from API
+        const response = await fetch(`/api/bbva/calendar_data/${accountType}?year=${currentYear}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            updateCalendarDisplay(data);
+            updateAccountHeader(data);
+            updateSummaryCards(data.summary_stats);
+            updateTabBadges(data.account_stats);
+        } else {
+            showError('Failed to load account data: ' + data.error);
+        }
+        
+    } catch (error) {
+        console.error('Error loading account data:', error);
+        showError('Failed to load account data. Please try again.');
+    } finally {
+        isLoading = false;
+        hideLoadingState();
+    }
+}
+
+// Update calendar display
+function updateCalendarDisplay(data) {
+    const months = data.months || [];
+    const calendarGrid = document.querySelector('.months-grid');
+    
+    if (!calendarGrid) {
+        console.error('Calendar grid not found');
+        return;
+    }
+    
+    // Clear existing content
+    calendarGrid.innerHTML = '';
+    
+    // Generate month squares
+    months.forEach(month => {
+        const monthSquare = createMonthSquare(month);
+        calendarGrid.appendChild(monthSquare);
+    });
+    
+    // Update calendar header
+    const calendarHeader = document.querySelector('.calendar-header h3');
+    if (calendarHeader) {
+        calendarHeader.textContent = `${currentYear} Calendar - ${BBVA_ACCOUNTS[currentBbvaAccount].name}`;
+    }
+}
+
+// Create month square element
+function createMonthSquare(month) {
+    const square = document.createElement('div');
+    square.className = 'month-square';
+    square.dataset.month = month.number;
+    square.dataset.account = currentBbvaAccount;
+    square.onclick = () => handleBbvaMonthClick(currentBbvaAccount, month.number);
+    
+    const fileStatusClass = month.file_info ? 'has-file' : '';
+    const parseStatusClass = month.parse_info && month.parse_info.status === 'parsed' ? 'parsed' : '';
+    
+    square.innerHTML = `
+        <div class="month-header">
+            <span class="month-name">${month.name}</span>
+            <span class="month-year">${currentYear}</span>
+        </div>
+        
+        <div class="month-content">
+            <div class="file-status ${fileStatusClass}">
+                <i class="file-icon ${month.file_info ? 'pdf-present' : 'pdf-missing'} fas ${month.file_info ? 'fa-file-pdf' : 'fa-file'}" 
+                   title="${month.file_info ? month.file_info.tooltip : 'No PDF file found'}"></i>
+                <span class="file-name">${month.file_info ? month.file_info.display_name : 'Missing'}</span>
+            </div>
+            
+            <div class="parse-status ${parseStatusClass}">
+                <i class="database-icon ${month.parse_info ? getParseStatusClass(month.parse_info.status) : 'unparsed'} fas fa-database" 
+                   title="${month.parse_info ? month.parse_info.tooltip : 'Not parsed'}"></i>
+                ${month.parse_info && month.parse_info.record_count ? 
+                    `<span class="record-count">${month.parse_info.record_count} records</span>` : ''}
+            </div>
+        </div>
+        
+        <div class="month-border ${getMonthStatusClass(month.file_info, month.parse_info)}"></div>
+    `;
+    
+    return square;
+}
+
+// Handle month click for BBVA
+function handleBbvaMonthClick(accountType, month) {
+    console.log(`Clicked ${accountType} month ${month}`);
+    
+    // Check if file exists
+    const monthData = getCurrentMonthData(month);
+    
+    if (monthData && monthData.file_info) {
+        // File exists - show options
+        showMonthOptions(accountType, month, monthData);
+    } else {
+        // No file - show upload modal
+        openUploadModal(accountType, month);
+    }
+}
+
+// Get current month data
+function getCurrentMonthData(monthNumber) {
+    const monthSquare = document.querySelector(`[data-month="${monthNumber}"][data-account="${currentBbvaAccount}"]`);
+    if (!monthSquare) return null;
+    
+    // Extract data from the month square (this would come from the server in real implementation)
+    return {
+        month: monthNumber,
+        file_info: monthSquare.querySelector('.file-status').classList.contains('has-file') ? {
+            display_name: monthSquare.querySelector('.file-name').textContent
+        } : null,
+        parse_info: monthSquare.querySelector('.parse-status').classList.contains('parsed') ? {
+            status: 'parsed',
+            record_count: monthSquare.querySelector('.record-count') ? 
+                parseInt(monthSquare.querySelector('.record-count').textContent) : 0
+        } : null
+    };
+}
+
+// Show month options modal
+function showMonthOptions(accountType, month, monthData) {
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.innerHTML = `
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        ${BBVA_ACCOUNTS[accountType].name} - ${getMonthName(month)} ${currentYear}
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="file-info mb-3">
+                        <h6>File Information</h6>
+                        <p><strong>File:</strong> ${monthData.file_info.display_name}</p>
+                        <p><strong>Status:</strong> 
+                            ${monthData.parse_info ? 
+                                `<span class="text-success">Parsed (${monthData.parse_info.record_count} records)</span>` : 
+                                '<span class="text-warning">Not parsed</span>'}
+                        </p>
+                    </div>
+                    
+                    <div class="actions">
+                        <button class="btn btn-primary me-2" onclick="downloadFile('${accountType}', ${month})">
+                            <i class="fas fa-download"></i> Download PDF
+                        </button>
+                        ${!monthData.parse_info ? 
+                            `<button class="btn btn-success me-2" onclick="parseFile('${accountType}', ${month})">
+                                <i class="fas fa-play"></i> Parse File
+                            </button>` : ''}
+                        ${monthData.parse_info ? 
+                            `<button class="btn btn-info me-2" onclick="reviewFileData('${accountType}', ${month})">
+                                <i class="fas fa-search"></i> Review Data
+                            </button>` : ''}
+                        <button class="btn btn-outline-danger" onclick="replaceFile('${accountType}', ${month})">
+                            <i class="fas fa-upload"></i> Replace File
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    const bootstrapModal = new bootstrap.Modal(modal);
+    bootstrapModal.show();
+    
+    // Clean up when modal is hidden
+    modal.addEventListener('hidden.bs.modal', () => {
+        document.body.removeChild(modal);
+    });
+}
+
+// Parse operations
+async function startParsing(accountType) {
+    if (isLoading) return;
+    
+    try {
+        isLoading = true;
+        
+        // Show progress modal
+        showProgressModal('Parsing BBVA PDFs...', 'Initializing PDF parsing...');
+        
+        const response = await fetch(`/api/bbva/parse/${accountType}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        // Handle streaming response for progress updates
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n');
+            
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    try {
+                        const data = JSON.parse(line.slice(6));
+                        updateProgressModal(data);
+                        
+                        if (data.complete) {
+                            hideProgressModal();
+                            loadAccountData(accountType); // Refresh data
+                            showSuccess('PDF parsing completed successfully!');
+                        }
+                    } catch (e) {
+                        console.error('Error parsing progress data:', e);
+                    }
+                }
+            }
+        }
+        
+    } catch (error) {
+        console.error('Error parsing account:', error);
+        hideProgressModal();
+        showError('Failed to parse PDFs: ' + error.message);
+    } finally {
+        isLoading = false;
+    }
+}
+
+// Export operations
+function openExportModal(accountType) {
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.innerHTML = `
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Export ${BBVA_ACCOUNTS[accountType].name} Data</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="exportForm">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label class="form-label">Start Date</label>
+                                <input type="date" class="form-control" id="startDate" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">End Date</label>
+                                <input type="date" class="form-control" id="endDate" required>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-3">
+                            <label class="form-label">Transaction Type</label>
+                            <select class="form-select" id="transactionType">
+                                <option value="all">All Transactions</option>
+                                <option value="cargo">Charges Only</option>
+                                <option value="abono">Credits Only</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mt-3">
+                            <label class="form-label">Minimum Amount</label>
+                            <input type="number" class="form-control" id="minAmount" placeholder="Optional" step="0.01">
+                        </div>
+                        
+                        <div class="mt-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="includeBalances" checked>
+                                <label class="form-check-label" for="includeBalances">
+                                    Include Balance Columns
+                                </label>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" onclick="executeExport('${accountType}')">
+                        <i class="fas fa-download"></i> Export Excel
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    const bootstrapModal = new bootstrap.Modal(modal);
+    bootstrapModal.show();
+    
+    // Set default dates (current year)
+    const startDate = document.getElementById('startDate');
+    const endDate = document.getElementById('endDate');
+    startDate.value = `${currentYear}-01-01`;
+    endDate.value = `${currentYear}-12-31`;
+    
+    // Clean up when modal is hidden
+    modal.addEventListener('hidden.bs.modal', () => {
+        document.body.removeChild(modal);
+    });
+}
+
+// Execute export
+async function executeExport(accountType) {
+    const form = document.getElementById('exportForm');
+    const formData = new FormData(form);
+    
+    const exportParams = {
+        account_type: accountType,
+        start_date: document.getElementById('startDate').value,
+        end_date: document.getElementById('endDate').value,
+        transaction_type: document.getElementById('transactionType').value,
+        min_amount: document.getElementById('minAmount').value || null,
+        include_balances: document.getElementById('includeBalances').checked
+    };
+    
+    try {
+        showLoading('Generating Excel export...');
+        
+        const response = await fetch(`/api/bbva/export/${accountType}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(exportParams)
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Export failed: ${response.status}`);
+        }
+        
+        // Download the file
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${BBVA_ACCOUNTS[accountType].name}_${exportParams.start_date}_${exportParams.end_date}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        
+        // Close modal
+        bootstrap.Modal.getInstance(document.querySelector('.modal')).hide();
+        showSuccess('Export completed successfully!');
+        
+    } catch (error) {
+        console.error('Export error:', error);
+        showError('Export failed: ' + error.message);
+    } finally {
+        hideLoading();
+    }
+}
+
+// Review operations
+function openReviewModal(accountType) {
+    // This would open the shared review modal with BBVA data
+    // Implementation would be similar to STP but with BBVA-specific fields
+    console.log(`Opening review modal for ${accountType}`);
+    showInfo('Review modal functionality will be implemented in Phase 4');
+}
+
+// Upload operations
+function openUploadModal(accountType, month = null) {
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.innerHTML = `
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        Upload PDF - ${BBVA_ACCOUNTS[accountType].name}
+                        ${month ? ` (${getMonthName(month)} ${currentYear})` : ''}
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="upload-info mb-3">
+                        <h6>File Requirements:</h6>
+                        <ul class="small text-muted">
+                            <li>PDF format only</li>
+                            <li>CLABE number must match: ${BBVA_ACCOUNTS[accountType].clabe}</li>
+                            <li>File will be renamed to: YYMM ${BBVA_ACCOUNTS[accountType].file_pattern}</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="upload-area" id="uploadArea">
+                        <input type="file" id="fileInput" accept=".pdf" multiple>
+                        <div class="upload-placeholder">
+                            <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                            <p>Drop PDF files here or click to browse</p>
+                            <button type="button" class="btn btn-outline-primary" onclick="document.getElementById('fileInput').click()">
+                                Choose Files
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="fileList" class="mt-3"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="uploadButton" onclick="executeUpload('${accountType}')" disabled>
+                        <i class="fas fa-upload"></i> Upload PDFs
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    const bootstrapModal = new bootstrap.Modal(modal);
+    bootstrapModal.show();
+    
+    // Set up file input handlers
+    setupUploadHandlers(accountType);
+    
+    // Clean up when modal is hidden
+    modal.addEventListener('hidden.bs.modal', () => {
+        document.body.removeChild(modal);
+    });
+}
+
+// Set up upload handlers
+function setupUploadHandlers(accountType) {
+    const fileInput = document.getElementById('fileInput');
+    const uploadArea = document.getElementById('uploadArea');
+    const fileList = document.getElementById('fileList');
+    const uploadButton = document.getElementById('uploadButton');
+    
+    let selectedFiles = [];
+    
+    // File input change
+    fileInput.addEventListener('change', (e) => {
+        handleFileSelection(e.target.files);
+    });
+    
+    // Drag and drop
+    uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.classList.add('drag-over');
+    });
+    
+    uploadArea.addEventListener('dragleave', () => {
+        uploadArea.classList.remove('drag-over');
+    });
+    
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('drag-over');
+        handleFileSelection(e.dataTransfer.files);
+    });
+    
+    function handleFileSelection(files) {
+        selectedFiles = Array.from(files).filter(file => file.type === 'application/pdf');
+        updateFileList();
+        uploadButton.disabled = selectedFiles.length === 0;
+    }
+    
+    function updateFileList() {
+        if (selectedFiles.length === 0) {
+            fileList.innerHTML = '';
+            return;
+        }
+        
+        fileList.innerHTML = `
+            <h6>Selected Files (${selectedFiles.length}):</h6>
+            <div class="list-group">
+                ${selectedFiles.map((file, index) => `
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <i class="fas fa-file-pdf text-danger me-2"></i>
+                            <span>${file.name}</span>
+                            <small class="text-muted d-block">${(file.size / 1024 / 1024).toFixed(2)} MB</small>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeFile(${index})">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    }
+    
+    // Make removeFile available globally for this modal
+    window.removeFile = function(index) {
+        selectedFiles.splice(index, 1);
+        updateFileList();
+        uploadButton.disabled = selectedFiles.length === 0;
+    };
+    
+    // Store files for upload
+    window.currentUploadFiles = selectedFiles;
+}
+
+// Execute upload
+async function executeUpload(accountType) {
+    const files = window.currentUploadFiles || [];
+    if (files.length === 0) return;
+    
+    try {
+        showLoading('Uploading PDF files...');
+        
+        const formData = new FormData();
+        files.forEach(file => {
+            formData.append('files', file);
+        });
+        formData.append('account_type', accountType);
+        
+        const response = await fetch('/api/bbva/upload', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // Close modal
+            bootstrap.Modal.getInstance(document.querySelector('.modal')).hide();
+            
+            // Refresh account data
+            loadAccountData(accountType);
+            
+            showSuccess(`Successfully uploaded ${result.uploaded_count} files!`);
+            
+            if (result.errors && result.errors.length > 0) {
+                showWarning(`Some files had issues: ${result.errors.join(', ')}`);
+            }
+        } else {
+            throw new Error(result.error || 'Upload failed');
+        }
+        
+    } catch (error) {
+        console.error('Upload error:', error);
+        showError('Upload failed: ' + error.message);
+    } finally {
+        hideLoading();
+        // Clean up global variables
+        window.currentUploadFiles = null;
+        window.removeFile = null;
+    }
+}
+
+// Utility functions
+function updateAccountHeader(data) {
+    const accountInfo = document.querySelector('.account-info h2');
+    if (accountInfo) {
+        accountInfo.textContent = BBVA_ACCOUNTS[currentBbvaAccount].name;
+    }
+    
+    const accountDescription = document.querySelector('.account-description');
+    if (accountDescription) {
+        accountDescription.textContent = `CLABE: ${BBVA_ACCOUNTS[currentBbvaAccount].clabe}`;
+    }
+}
+
+function changeYear(delta) {
+    currentYear += delta;
+    updateYearDisplay();
+    loadAccountData(currentBbvaAccount);
+    
+    // Update URL
+    const newUrl = new URL(window.location);
+    newUrl.searchParams.set('year', currentYear);
+    window.history.pushState({}, '', newUrl);
+}
+
+function updateYearDisplay() {
+    const yearDisplay = document.querySelector('.current-year');
+    if (yearDisplay) {
+        yearDisplay.textContent = currentYear;
+    }
+}
+
+function getMonthName(monthNumber) {
+    const months = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    return months[monthNumber - 1];
+}
+
+// Loading and notification functions
+function showLoadingState() {
+    const calendar = document.querySelector('.calendar-section');
+    if (calendar) {
+        calendar.classList.add('loading');
+    }
+}
+
+function hideLoadingState() {
+    const calendar = document.querySelector('.calendar-section');
+    if (calendar) {
+        calendar.classList.remove('loading');
+    }
+}
+
+function showLoading(message) {
+    // Implementation would show a loading spinner with message
+    console.log('Loading:', message);
+}
+
+function hideLoading() {
+    // Implementation would hide loading spinner
+    console.log('Loading complete');
+}
+
+function showProgressModal(title, message) {
+    // Implementation would show progress modal
+    console.log('Progress:', title, message);
+}
+
+function updateProgressModal(data) {
+    // Implementation would update progress modal
+    console.log('Progress update:', data);
+}
+
+function hideProgressModal() {
+    // Implementation would hide progress modal
+    console.log('Progress complete');
+}
+
+function showSuccess(message) {
+    // Implementation would show success toast/alert
+    console.log('Success:', message);
+}
+
+function showError(message) {
+    // Implementation would show error toast/alert
+    console.error('Error:', message);
+}
+
+function showWarning(message) {
+    // Implementation would show warning toast/alert
+    console.warn('Warning:', message);
+}
+
+function showInfo(message) {
+    // Implementation would show info toast/alert
+    console.info('Info:', message);
+}
+
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeBbvaCalendar);
+} else {
+    initializeBbvaCalendar();
+}
+</script>
+
+<style>
+/* Upload area styling */
+.upload-area {
+    border: 2px dashed #dee2e6;
+    border-radius: 0.5rem;
+    padding: 2rem;
+    text-align: center;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.upload-area:hover,
+.upload-area.drag-over {
+    border-color: var(--bbva-accent);
+    background-color: var(--bbva-light-accent);
+}
+
+.upload-area input[type="file"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.upload-placeholder p {
+    margin: 1rem 0;
+    color: #6c757d;
+}
+</style>

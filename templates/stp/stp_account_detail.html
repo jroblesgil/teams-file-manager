@@ -1,0 +1,459 @@
+<!-- templates/stp_account_detail.html -->
+{% extends "base.html" %}
+
+{% block title %}{{ account_type }} Details - STP Calendar{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('stp_calendar', year=year) }}">STP Calendar</a></li>
+            <li class="breadcrumb-item active">{{ account_type }}</li>
+        </ol>
+    </nav>
+
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="h2">
+                        <i class="fas fa-building text-primary"></i>
+                        {{ account_type }} Details
+                    </h1>
+                    <p class="text-muted">Account: {{ account_number }} | Year: {{ year }}</p>
+                </div>
+                <div class="btn-group">
+                    <a href="{{ url_for('stp_account_detail', account_number=account_number, year=year-1) }}" 
+                       class="btn btn-outline-secondary">
+                        <i class="fas fa-chevron-left"></i> {{ year-1 }}
+                    </a>
+                    <a href="{{ url_for('stp_calendar', year=year) }}" class="btn btn-primary">
+                        Calendar View
+                    </a>
+                    <a href="{{ url_for('stp_account_detail', account_number=account_number, year=year+1) }}" 
+                       class="btn btn-outline-secondary">
+                        {{ year+1 }} <i class="fas fa-chevron-right"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title text-primary">{{ total_files }}</h5>
+                    <p class="card-text">Total Files</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    {% set complete_months = 0 %}
+                    {% for month_key, month_data in months_detail.items() %}
+                        {% if month_data.status == 'complete' %}
+                            {% set complete_months = complete_months + 1 %}
+                        {% endif %}
+                    {% endfor %}
+                    <h5 class="card-title text-success">{{ complete_months }}</h5>
+                    <p class="card-text">Complete Months</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    {% set partial_months = 0 %}
+                    {% for month_key, month_data in months_detail.items() %}
+                        {% if month_data.status == 'partial' %}
+                            {% set partial_months = partial_months + 1 %}
+                        {% endif %}
+                    {% endfor %}
+                    <h5 class="card-title text-warning">{{ partial_months }}</h5>
+                    <p class="card-text">Partial Months</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    {% set missing_months = 0 %}
+                    {% for month_key, month_data in months_detail.items() %}
+                        {% if month_data.status == 'missing' %}
+                            {% set missing_months = missing_months + 1 %}
+                        {% endif %}
+                    {% endfor %}
+                    <h5 class="card-title text-secondary">{{ missing_months }}</h5>
+                    <p class="card-text">Missing Months</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Monthly Details -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-calendar-check"></i>
+                        Monthly File Details
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Month</th>
+                                    <th>Status</th>
+                                    <th>PDF File</th>
+                                    <th>Excel File</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for month_key, month_data in months_detail.items() %}
+                                <tr class="status-{{ month_data.status }}">
+                                    <td>
+                                        <strong>{{ month_data.month_name }} {{ year }}</strong>
+                                        <br>
+                                        <small class="text-muted">{{ month_key }}</small>
+                                    </td>
+                                    <td>
+                                        {% if month_data.status == 'complete' %}
+                                        <span class="badge bg-success">
+                                            <i class="fas fa-check-circle"></i> Complete
+                                        </span>
+                                        {% elif month_data.status == 'partial' %}
+                                        <span class="badge bg-warning">
+                                            <i class="fas fa-exclamation-triangle"></i> Partial
+                                        </span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">
+                                            <i class="fas fa-times-circle"></i> Missing
+                                        </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if month_data.pdf_file %}
+                                        <div class="file-info">
+                                            <i class="fas fa-file-pdf text-danger me-2"></i>
+                                            <strong>{{ month_data.pdf_file.filename }}</strong>
+                                            <br>
+                                            <small class="text-muted">
+                                                {{ month_data.pdf_file.size_formatted }}
+                                                {% if month_data.pdf_file.last_modified_formatted %}
+                                                | Modified: {{ month_data.pdf_file.last_modified_formatted }}
+                                                {% endif %}
+                                            </small>
+                                        </div>
+                                        {% else %}
+                                        <span class="text-muted">
+                                            <i class="fas fa-file-pdf me-2"></i>
+                                            Not available
+                                        </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if month_data.xlsx_file %}
+                                        <div class="file-info">
+                                            <i class="fas fa-file-excel text-success me-2"></i>
+                                            <strong>{{ month_data.xlsx_file.filename }}</strong>
+                                            <br>
+                                            <small class="text-muted">
+                                                {{ month_data.xlsx_file.size_formatted }}
+                                                {% if month_data.xlsx_file.last_modified_formatted %}
+                                                | Modified: {{ month_data.xlsx_file.last_modified_formatted }}
+                                                {% endif %}
+                                            </small>
+                                        </div>
+                                        {% else %}
+                                        <span class="text-muted">
+                                            <i class="fas fa-file-excel me-2"></i>
+                                            Not available
+                                        </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group-vertical btn-group-sm">
+                                            {% if month_data.pdf_file %}
+                                            <a href="{{ month_data.pdf_file.download_url }}" 
+                                               class="btn btn-outline-danger btn-sm mb-1"
+                                               title="Download PDF">
+                                                <i class="fas fa-download"></i> PDF
+                                            </a>
+                                            {% endif %}
+                                            {% if month_data.xlsx_file %}
+                                            <a href="{{ month_data.xlsx_file.download_url }}" 
+                                               class="btn btn-outline-success btn-sm"
+                                               title="Download Excel">
+                                                <i class="fas fa-download"></i> Excel
+                                            </a>
+                                            {% endif %}
+                                            {% if not month_data.pdf_file and not month_data.xlsx_file %}
+                                            <button class="btn btn-outline-secondary btn-sm" disabled>
+                                                <i class="fas fa-ban"></i> No Files
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- File Analysis -->
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">File Coverage Analysis</h6>
+                </div>
+                <div class="card-body">
+                    <canvas id="coverageChart" width="400" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">Monthly File Count</h6>
+                </div>
+                <div class="card-body">
+                    <canvas id="monthlyChart" width="400" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden data for JavaScript -->
+<script type="application/json" id="chart-data">
+{
+    "months": [
+        {% for month_key, month_data in months_detail.items() %}
+        {
+            "key": "{{ month_key }}",
+            "name": "{{ month_data.month_name }}",
+            "status": "{{ month_data.status }}",
+            "has_pdf": {{ 'true' if month_data.pdf_file else 'false' }},
+            "has_xlsx": {{ 'true' if month_data.xlsx_file else 'false' }},
+            "file_count": {{ (1 if month_data.pdf_file else 0) + (1 if month_data.xlsx_file else 0) }}
+        }{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ]
+}
+</script>
+
+<style>
+.status-complete {
+    background-color: rgba(40, 167, 69, 0.1);
+}
+
+.status-partial {
+    background-color: rgba(255, 193, 7, 0.1);
+}
+
+.status-missing {
+    background-color: rgba(108, 117, 125, 0.1);
+}
+
+.file-info {
+    max-width: 250px;
+}
+
+.table td {
+    vertical-align: middle;
+}
+
+.btn-group-vertical .btn {
+    margin-bottom: 2px;
+}
+
+.btn-group-vertical .btn:last-child {
+    margin-bottom: 0;
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Parse data from JSON script tag
+    const chartDataElement = document.getElementById('chart-data');
+    const chartData = JSON.parse(chartDataElement.textContent);
+    
+    // Calculate stats
+    let completeCount = 0;
+    let partialCount = 0;
+    let missingCount = 0;
+    
+    chartData.months.forEach(month => {
+        if (month.status === 'complete') {
+            completeCount++;
+        } else if (month.status === 'partial') {
+            partialCount++;
+        } else {
+            missingCount++;
+        }
+    });
+
+    // Coverage Chart (Doughnut)
+    const coverageCtx = document.getElementById('coverageChart').getContext('2d');
+    const coverageChartData = {
+        labels: ['Complete', 'Partial', 'Missing'],
+        datasets: [{
+            data: [completeCount, partialCount, missingCount],
+            backgroundColor: ['#28a745', '#ffc107', '#6c757d'],
+            borderWidth: 2,
+            borderColor: '#fff'
+        }]
+    };
+
+    new Chart(coverageCtx, {
+        type: 'doughnut',
+        data: coverageChartData,
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.parsed;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = ((value / total) * 100).toFixed(1);
+                            return `${label}: ${value} months (${percentage}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Monthly Chart (Bar) - Only show months with files
+    const monthsWithFiles = chartData.months.filter(month => month.file_count > 0);
+    
+    const monthlyCtx = document.getElementById('monthlyChart').getContext('2d');
+    const monthlyChartData = {
+        labels: monthsWithFiles.map(month => month.name),
+        datasets: [{
+            label: 'Files per Month',
+            data: monthsWithFiles.map(month => month.file_count),
+            backgroundColor: monthsWithFiles.map(month => {
+                if (month.status === 'complete') return '#28a745';
+                if (month.status === 'partial') return '#ffc107';
+                return '#6c757d';
+            }),
+            borderColor: monthsWithFiles.map(month => {
+                if (month.status === 'complete') return '#1e7e34';
+                if (month.status === 'partial') return '#d39e00';
+                return '#545b62';
+            }),
+            borderWidth: 1
+        }]
+    };
+
+    new Chart(monthlyCtx, {
+        type: 'bar',
+        data: monthlyChartData,
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 2,
+                    ticks: {
+                        stepSize: 1,
+                        callback: function(value) {
+                            return value + ' file' + (value === 1 ? '' : 's');
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: 'Number of Files'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Month'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const monthIndex = context.dataIndex;
+                            const month = monthsWithFiles[monthIndex];
+                            let tooltip = `${context.parsed.y} file${context.parsed.y === 1 ? '' : 's'}`;
+                            
+                            if (month.has_pdf && month.has_xlsx) {
+                                tooltip += ' (PDF + Excel)';
+                            } else if (month.has_pdf) {
+                                tooltip += ' (PDF only)';
+                            } else if (month.has_xlsx) {
+                                tooltip += ' (Excel only)';
+                            }
+                            
+                            return tooltip;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Add loading states to download buttons
+    const downloadButtons = document.querySelectorAll('a[href*="/content"], a[href*="/download"]');
+    downloadButtons.forEach(button => {
+        button.addEventListener('click', function(e) {
+            // Don't interfere with the download if it's a valid link
+            if (this.href && this.href !== '#') {
+                const originalText = this.innerHTML;
+                this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Downloading...';
+                this.classList.add('disabled');
+                
+                // Reset after a short delay
+                setTimeout(() => {
+                    this.innerHTML = originalText;
+                    this.classList.remove('disabled');
+                }, 2000);
+            }
+        });
+    });
+
+    // Add hover effects to table rows
+    const tableRows = document.querySelectorAll('tbody tr');
+    tableRows.forEach(row => {
+        row.addEventListener('mouseenter', function() {
+            this.style.transform = 'scale(1.01)';
+            this.style.transition = 'transform 0.2s ease';
+        });
+        
+        row.addEventListener('mouseleave', function() {
+            this.style.transform = 'scale(1)';
+        });
+    });
+});
+</script>
+{% endblock %}

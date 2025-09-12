@@ -1,0 +1,144 @@
+<!-- File Conflict Resolution Modal -->
+<!-- Add this to your HTML template where the upload modal is defined -->
+
+<div class="modal fade" id="fileConflictModal" tabindex="-1" role="dialog" aria-labelledby="fileConflictModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title" id="fileConflictModalLabel">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    File Already Exists
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <h6 class="alert-heading">
+                        <i class="fas fa-file-pdf me-2"></i>
+                        File Conflict Detected
+                    </h6>
+                    <p class="mb-0">A file with the same name already exists in the system.</p>
+                </div>
+
+                <!-- Conflict Details -->
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header bg-light">
+                                <h6 class="card-title mb-0">
+                                    <i class="fas fa-upload text-primary me-2"></i>
+                                    New File (Uploading)
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div id="newFileDetails">
+                                    <p><strong>Filename:</strong> <span id="newFileName">-</span></p>
+                                    <p><strong>Size:</strong> <span id="newFileSize">-</span></p>
+                                    <p><strong>Account:</strong> <span id="newFileAccount">-</span></p>
+                                    <p><strong>Period:</strong> <span id="newFilePeriod">-</span></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header bg-light">
+                                <h6 class="card-title mb-0">
+                                    <i class="fas fa-file-check text-success me-2"></i>
+                                    Existing File
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div id="existingFileDetails">
+                                    <p><strong>Filename:</strong> <span id="existingFileName">-</span></p>
+                                    <p><strong>Size:</strong> <span id="existingFileSize">-</span></p>
+                                    <p><strong>Last Modified:</strong> <span id="existingFileDate">-</span></p>
+                                    <p><strong>Download:</strong> <a href="#" id="existingFileDownload" target="_blank">View Current File</a></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Resolution Options -->
+                <div class="mt-4">
+                    <h6>What would you like to do?</h6>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="conflictResolution" id="overwriteFile" value="overwrite" checked>
+                        <label class="form-check-label" for="overwriteFile">
+                            <strong>Replace existing file</strong>
+                            <small class="text-muted d-block">The new file will overwrite the existing one</small>
+                        </label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="conflictResolution" id="renameFile" value="rename">
+                        <label class="form-check-label" for="renameFile">
+                            <strong>Upload with different name</strong>
+                            <small class="text-muted d-block">Add suffix to avoid conflict (e.g., "_v2")</small>
+                        </label>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="radio" name="conflictResolution" id="cancelUpload" value="cancel">
+                        <label class="form-check-label" for="cancelUpload">
+                            <strong>Cancel upload</strong>
+                            <small class="text-muted d-block">Keep existing file, don't upload new one</small>
+                        </label>
+                    </div>
+
+                    <!-- Custom filename input (shown when rename is selected) -->
+                    <div id="customFilenameGroup" style="display: none;">
+                        <label for="customFilename" class="form-label">New filename:</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="customFilename" placeholder="Enter new filename">
+                            <span class="input-group-text">.pdf</span>
+                        </div>
+                        <small class="form-text text-muted">Enter the filename without extension</small>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-2"></i>Cancel
+                </button>
+                <button type="button" class="btn btn-primary" id="resolveConflictBtn">
+                    <i class="fas fa-check me-2"></i>Continue
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Handle conflict resolution radio button changes
+document.addEventListener('DOMContentLoaded', function() {
+    const radioButtons = document.querySelectorAll('input[name="conflictResolution"]');
+    const customFilenameGroup = document.getElementById('customFilenameGroup');
+    const resolveBtn = document.getElementById('resolveConflictBtn');
+
+    radioButtons.forEach(radio => {
+        radio.addEventListener('change', function() {
+            if (this.value === 'rename') {
+                customFilenameGroup.style.display = 'block';
+            } else {
+                customFilenameGroup.style.display = 'none';
+            }
+
+            // Update button text based on selection
+            switch (this.value) {
+                case 'overwrite':
+                    resolveBtn.innerHTML = '<i class="fas fa-sync me-2"></i>Replace File';
+                    resolveBtn.className = 'btn btn-warning';
+                    break;
+                case 'rename':
+                    resolveBtn.innerHTML = '<i class="fas fa-upload me-2"></i>Upload with New Name';
+                    resolveBtn.className = 'btn btn-primary';
+                    break;
+                case 'cancel':
+                    resolveBtn.innerHTML = '<i class="fas fa-times me-2"></i>Cancel Upload';
+                    resolveBtn.className = 'btn btn-secondary';
+                    break;
+            }
+        });
+    });
+});
+</script>

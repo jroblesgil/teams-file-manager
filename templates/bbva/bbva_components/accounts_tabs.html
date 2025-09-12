@@ -1,0 +1,350 @@
+<!-- BBVA Accounts Tabs Component -->
+<div class="accounts-tabs-section">
+    <div class="accounts-tabs-container">
+        
+        <!-- Tab Navigation -->
+        <ul class="nav nav-tabs accounts-nav" id="bbvaAccountTabs" role="tablist">
+            
+            <!-- BBVA MX MXN Tab -->
+            <li class="nav-item" role="presentation">
+                <button class="nav-link account-tab {{ 'active' if current_account_type == 'bbva_mx_mxn' else '' }}" 
+                        id="bbva-mx-mxn-tab" 
+                        data-bs-toggle="tab" 
+                        data-bs-target="#bbva-mx-mxn-content" 
+                        data-account="bbva_mx_mxn"
+                        type="button" 
+                        role="tab" 
+                        onclick="switchAccount('bbva_mx_mxn')">
+                    <span class="tab-title">BBVA MX MXN</span>
+                    <span class="tab-badge" id="mx-mxn-badge">
+                        {{ account_stats.bbva_mx_mxn.file_count if account_stats and account_stats.bbva_mx_mxn else '0' }}/12
+                    </span>
+                </button>
+            </li>
+            
+            <!-- BBVA MX USD Tab -->
+            <li class="nav-item" role="presentation">
+                <button class="nav-link account-tab {{ 'active' if current_account_type == 'bbva_mx_usd' else '' }}" 
+                        id="bbva-mx-usd-tab" 
+                        data-bs-toggle="tab" 
+                        data-bs-target="#bbva-mx-usd-content" 
+                        data-account="bbva_mx_usd"
+                        type="button" 
+                        role="tab" 
+                        onclick="switchAccount('bbva_mx_usd')">
+                    <span class="tab-title">BBVA MX USD</span>
+                    <span class="tab-badge" id="mx-usd-badge">
+                        {{ account_stats.bbva_mx_usd.file_count if account_stats and account_stats.bbva_mx_usd else '0' }}/12
+                    </span>
+                </button>
+            </li>
+            
+            <!-- BBVA SA MXN Tab -->
+            <li class="nav-item" role="presentation">
+                <button class="nav-link account-tab {{ 'active' if current_account_type == 'bbva_sa_mxn' else '' }}" 
+                        id="bbva-sa-mxn-tab" 
+                        data-bs-toggle="tab" 
+                        data-bs-target="#bbva-sa-mxn-content" 
+                        data-account="bbva_sa_mxn"
+                        type="button" 
+                        role="tab" 
+                        onclick="switchAccount('bbva_sa_mxn')">
+                    <span class="tab-title">BBVA SA MXN</span>
+                    <span class="tab-badge" id="sa-mxn-badge">
+                        {{ account_stats.bbva_sa_mxn.file_count if account_stats and account_stats.bbva_sa_mxn else '0' }}/12
+                    </span>
+                </button>
+            </li>
+            
+            <!-- BBVA SA USD Tab -->
+            <li class="nav-item" role="presentation">
+                <button class="nav-link account-tab {{ 'active' if current_account_type == 'bbva_sa_usd' else '' }}" 
+                        id="bbva-sa-usd-tab" 
+                        data-bs-toggle="tab" 
+                        data-bs-target="#bbva-sa-usd-content" 
+                        data-account="bbva_sa_usd"
+                        type="button" 
+                        role="tab" 
+                        onclick="switchAccount('bbva_sa_usd')">
+                    <span class="tab-title">BBVA SA USD</span>
+                    <span class="tab-badge" id="sa-usd-badge">
+                        {{ account_stats.bbva_sa_usd.file_count if account_stats and account_stats.bbva_sa_usd else '0' }}/12
+                    </span>
+                </button>
+            </li>
+            
+            <!-- BBVA IP Clientes Tab -->
+            <li class="nav-item" role="presentation">
+                <button class="nav-link account-tab {{ 'active' if current_account_type == 'bbva_ip_clientes' else '' }}" 
+                        id="bbva-ip-clientes-tab" 
+                        data-bs-toggle="tab" 
+                        data-bs-target="#bbva-ip-clientes-content" 
+                        data-account="bbva_ip_clientes"
+                        type="button" 
+                        role="tab" 
+                        onclick="switchAccount('bbva_ip_clientes')">
+                    <span class="tab-title">BBVA IP Clientes</span>
+                    <span class="tab-badge" id="ip-clientes-badge">
+                        {{ account_stats.bbva_ip_clientes.file_count if account_stats and account_stats.bbva_ip_clientes else '0' }}/12
+                    </span>
+                </button>
+            </li>
+            
+            <!-- BBVA IP Corp Tab -->
+            <li class="nav-item" role="presentation">
+                <button class="nav-link account-tab {{ 'active' if current_account_type == 'bbva_ip_corp' else '' }}" 
+                        id="bbva-ip-corp-tab" 
+                        data-bs-toggle="tab" 
+                        data-bs-target="#bbva-ip-corp-content" 
+                        data-account="bbva_ip_corp"
+                        type="button" 
+                        role="tab" 
+                        onclick="switchAccount('bbva_ip_corp')">
+                    <span class="tab-title">BBVA IP Corp</span>
+                    <span class="tab-badge" id="ip-corp-badge">
+                        {{ account_stats.bbva_ip_corp.file_count if account_stats and account_stats.bbva_ip_corp else '0' }}/12
+                    </span>
+                </button>
+            </li>
+            
+        </ul>
+        
+    </div>
+</div>
+
+<style>
+.accounts-tabs-section {
+    margin-bottom: 1.5rem;
+}
+
+.accounts-tabs-container {
+    background: white;
+    border-radius: 0.5rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+
+.accounts-nav {
+    border-bottom: 2px solid #e9ecef;
+    background: #f8f9fa;
+    margin-bottom: 0;
+}
+
+.accounts-nav .nav-item {
+    flex: 1;
+}
+
+.account-tab {
+    width: 100%;
+    padding: 1rem 0.75rem;
+    border: none;
+    background: transparent;
+    color: #6c757d;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: 0;
+    position: relative;
+}
+
+.account-tab:hover {
+    background-color: rgba(0, 68, 129, 0.1);
+    color: #004481;
+}
+
+.account-tab.active {
+    background-color: #004481;
+    color: white;
+    border-bottom: 3px solid #2DCCCD;
+}
+
+.account-tab.active:hover {
+    background-color: #003d75;
+    color: white;
+}
+
+.tab-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-align: center;
+    line-height: 1.2;
+}
+
+.tab-badge {
+    font-size: 0.75rem;
+    background-color: rgba(255, 255, 255, 0.2);
+    color: inherit;
+    padding: 0.2rem 0.5rem;
+    border-radius: 1rem;
+    min-width: 2.5rem;
+    text-align: center;
+    font-weight: 500;
+}
+
+.account-tab:not(.active) .tab-badge {
+    background-color: #e9ecef;
+    color: #6c757d;
+}
+
+.account-tab.active .tab-badge {
+    background-color: rgba(255, 255, 255, 0.3);
+    color: white;
+}
+
+/* Badge color coding based on completion */
+.tab-badge.complete {
+    background-color: #28a745 !important;
+    color: white !important;
+}
+
+.tab-badge.partial {
+    background-color: #ffc107 !important;
+    color: #212529 !important;
+}
+
+.tab-badge.empty {
+    background-color: #dc3545 !important;
+    color: white !important;
+}
+
+/* Responsive design */
+@media (max-width: 992px) {
+    .tab-title {
+        font-size: 0.8rem;
+    }
+    
+    .account-tab {
+        padding: 0.75rem 0.5rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .accounts-nav {
+        flex-wrap: wrap;
+    }
+    
+    .accounts-nav .nav-item {
+        flex: 1 1 50%;
+    }
+    
+    .tab-title {
+        font-size: 0.75rem;
+    }
+    
+    .tab-badge {
+        font-size: 0.7rem;
+        padding: 0.15rem 0.4rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .accounts-nav .nav-item {
+        flex: 1 1 100%;
+    }
+    
+    .account-tab {
+        flex-direction: row;
+        justify-content: space-between;
+        text-align: left;
+    }
+}
+
+/* Loading state */
+.account-tab.loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.account-tab.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    right: 1rem;
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid transparent;
+    border-top: 2px solid currentColor;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+</style>
+
+<script>
+// Global variable to track current account
+let currentAccount = '{{ current_account_type or "bbva_mx_mxn" }}';
+
+function switchAccount(accountType) {
+    // Update global current account
+    currentAccount = accountType;
+    
+    // Add loading state
+    const tab = document.querySelector(`[data-account="${accountType}"]`);
+    tab.classList.add('loading');
+    
+    // Load account data
+    loadAccountData(accountType).then(() => {
+        // Remove loading state
+        tab.classList.remove('loading');
+        
+        // Update URL without page reload
+        const newUrl = new URL(window.location);
+        newUrl.searchParams.set('account', accountType);
+        window.history.pushState({}, '', newUrl);
+        
+        // Update page title
+        updatePageTitle(accountType);
+    });
+}
+
+function updatePageTitle(accountType) {
+    const accountNames = {
+        'bbva_mx_mxn': 'BBVA MX MXN',
+        'bbva_mx_usd': 'BBVA MX USD',
+        'bbva_sa_mxn': 'BBVA SA MXN',
+        'bbva_sa_usd': 'BBVA SA USD',
+        'bbva_ip_clientes': 'BBVA IP Clientes',
+        'bbva_ip_corp': 'BBVA IP Corp'
+    };
+    
+    document.title = `Banks Parse - ${accountNames[accountType]}`;
+}
+
+function updateTabBadges(accountStats) {
+    Object.keys(accountStats).forEach(account => {
+        const stats = accountStats[account];
+        const badge = document.getElementById(`${account.replace('bbva_', '').replace('_', '-')}-badge`);
+        
+        if (badge) {
+            badge.textContent = `${stats.file_count}/12`;
+            
+            // Update badge color based on completion
+            badge.classList.remove('complete', 'partial', 'empty');
+            if (stats.file_count === 12) {
+                badge.classList.add('complete');
+            } else if (stats.file_count > 0) {
+                badge.classList.add('partial');
+            } else {
+                badge.classList.add('empty');
+            }
+        }
+    });
+}
+
+// Initialize tabs on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Set active tab based on URL parameter or default
+    const urlParams = new URLSearchParams(window.location.search);
+    const accountParam = urlParams.get('account');
+    if (accountParam && accountParam !== currentAccount) {
+        switchAccount(accountParam);
+    }
+});
+</script>

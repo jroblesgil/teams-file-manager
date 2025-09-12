@@ -1,0 +1,30 @@
+<div class="control-bar">
+    <div class="row align-items-center">
+        <div class="col-md-6">
+            <div class="d-flex align-items-center gap-2">
+                <label class="form-label fw-semibold mb-0">Year:</label>
+                <form method="get" action="{{ url_for('statements_year', year=available_years[0]) }}" class="d-inline">
+                    <select name="year" class="form-select form-select-sm" style="width: auto;" onchange="window.location.href='/statements/' + this.value">
+                        {% for year_option in available_years %}
+                        <option value="{{ year_option }}" {{ 'selected' if year_option == year else '' }}>
+                            {{ year_option }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </form>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="d-flex justify-content-end gap-2">
+                <a href="{{ url_for('statements_year', year=year) }}upload" class="btn btn-primary btn-sm">
+                    <i class="fas fa-upload me-1"></i>Upload Files
+                </a>
+                <form method="post" action="{{ url_for('refresh_calendar', year=year) }}" class="d-inline">
+                    <button type="submit" class="btn btn-success btn-sm">
+                        <i class="fas fa-sync-alt me-1"></i>Refresh Calendar
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

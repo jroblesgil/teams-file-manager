@@ -1,0 +1,78 @@
+<!-- templates/stp_components/calendar_grid.html - COMPLETELY FIXED VERSION -->
+<div class="row g-2">
+    {% for month in range(1, 13) %}
+    {% set month_key = year ~ '-' ~ '%02d'|format(month) %}
+    {% set month_data = account_data.months[month_key] %}
+    
+    <div class="col-xl-1 col-lg-2 col-md-3 col-sm-4 col-6">
+        <div class="month-square status-{{ month_data.status }} parse-status-{{ month_data.get('parse_status', 'not_parsed') }}" 
+             data-month="{{ month_key }}" data-account="{{ account_number }}">
+            {# Month Label #}
+            <div class="month-label">{{ month_data.month_name[:3] }}</div>
+            
+            {# File Icons - System-Aware Display #}
+            <div class="file-icons">
+                {% if month_data.pdf %}
+                <i class="fas fa-file-pdf pdf-icon" 
+                title="Download {{ month_data.pdf.filename }}"
+                onclick="downloadFile('{{ month_data.pdf.download_url }}', '{{ month_data.pdf.filename }}')"></i>
+                {% else %}
+                <i class="fas fa-file-pdf pdf-icon-missing" title="PDF missing"></i>
+                {% endif %}
+                
+                {% if system_type != 'bbva' %}
+                {# Only show Excel icons for STP, not BBVA #}
+                {% if month_data.xlsx %}
+                <i class="fas fa-file-excel excel-icon" 
+                title="Download {{ month_data.xlsx.filename }}"
+                onclick="downloadFile('{{ month_data.xlsx.download_url }}', '{{ month_data.xlsx.filename }}')"></i>
+                {% else %}
+                <i class="fas fa-file-excel excel-icon-missing" title="Excel missing"></i>
+                {% endif %}
+                {% endif %}
+            </div>
+
+            {# Parse Status Indicator with Record Count - FINAL FIXED VERSION #}
+            <div class="parse-indicator-with-count">
+                {% set parse_status = month_data.get('parse_status', 'not_parsed') %}
+                {% set transaction_count = month_data.get('transaction_count', 0) %}
+                
+                {# Database Icon with System-Specific Logic #}
+                {% if parse_status == 'parsed' %}
+                    {% if system_type == 'bbva' %}
+                        {# BBVA: Show icon with server-provided transaction count in title #}
+                        <i class="fas fa-database parse-icon-parsed" 
+                        title="Parsed: {{ transaction_count }} transactions"></i>
+                    {% else %}
+                        {# STP: Show icon, title shows transaction count from server data #}
+                        <i class="fas fa-database parse-icon-parsed" 
+                        title="Parsed: {{ transaction_count }} transactions"></i>
+                    {% endif %}
+                    
+                {% elif parse_status == 'different_format' %}
+                <i class="fas fa-exclamation-triangle parse-icon-different" 
+                title="Different file format"></i>
+                
+                {% elif parse_status == 'parse_error' %}
+                <i class="fas fa-times-circle parse-icon-error" 
+                title="Parse error"></i>
+                
+                {% else %}
+                {# Not parsed yet #}
+                <i class="fas fa-database" 
+                title="Not parsed yet"></i>
+                {% endif %}
+                
+                {# Transaction Count Display - FINAL VERSION #}
+                {% if system_type == 'bbva' %}
+                    {# BBVA: Pure server rendering, no client-side overrides #}
+                    <span class="record-count">{{ transaction_count }}</span>
+                {% else %}
+                    {# STP: Server data with JavaScript updates for client-side refresh #}
+                    <span class="record-count" data-account="{{ account_number }}" data-month="{{ month_key }}">{{ transaction_count }}</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
