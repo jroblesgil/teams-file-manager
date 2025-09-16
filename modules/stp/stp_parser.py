@@ -163,7 +163,6 @@ def convert_dd_mm_yyyy_to_yyyy_mm_dd(date_str: str) -> str:
     except Exception:
         return date_str
 
-
 def check_file_parsing_status(account_files: List[Dict[str, Any]], 
                             tracking_data: Dict[str, Any], 
                             account_number: str) -> List[Dict[str, Any]]:
@@ -186,10 +185,14 @@ def check_file_parsing_status(account_files: List[Dict[str, Any]],
         
         file_last_modified = file_info.get('last_modified_formatted')
         tracked_info = account_tracking.get(filename, {})
+        
+        # FIXED: Compare with stored file modification time, not parse time
+        tracked_file_modified = tracked_info.get('file_last_modified')
         tracked_last_parsed = tracked_info.get('last_parsed')
         
         logger.info(f"Checking file: {filename}")
         logger.info(f"  File last modified: {file_last_modified}")
+        logger.info(f"  Tracked file modified: {tracked_file_modified}")
         logger.info(f"  Last parsed: {tracked_last_parsed}")
         
         # Parse if file is new or has been modified since last parse
@@ -199,8 +202,12 @@ def check_file_parsing_status(account_files: List[Dict[str, Any]],
         if not tracked_last_parsed:
             needs_parsing = True
             reason = "never parsed"
-        elif file_last_modified and tracked_last_parsed:
-            # Convert both to comparable format
+        elif not tracked_file_modified:
+            # If we don't have stored file modification time, parse to be safe
+            needs_parsing = True
+            reason = "no stored file modification time"
+        elif file_last_modified and tracked_file_modified:
+            # FIXED: Compare current file modification time with stored file modification time
             try:
                 # Parse the dates properly
                 if 'T' in file_last_modified:
@@ -208,25 +215,26 @@ def check_file_parsing_status(account_files: List[Dict[str, Any]],
                 else:
                     file_dt = datetime.fromisoformat(file_last_modified)
                 
-                if 'T' in tracked_last_parsed:
-                    tracked_dt = datetime.fromisoformat(tracked_last_parsed.replace('Z', '+00:00'))
+                if 'T' in tracked_file_modified:
+                    tracked_dt = datetime.fromisoformat(tracked_file_modified.replace('Z', '+00:00'))
                 else:
-                    tracked_dt = datetime.fromisoformat(tracked_last_parsed)
+                    tracked_dt = datetime.fromisoformat(tracked_file_modified)
                 
+                # FIXED: This is the key fix - compare file modification times
                 if file_dt > tracked_dt:
                     needs_parsing = True
-                    reason = f"modified since last parse ({file_dt} > {tracked_dt})"
+                    reason = f"file modified since last parse ({file_dt} > {tracked_dt})"
                 else:
-                    reason = f"up to date ({file_dt} <= {tracked_dt})"
+                    reason = f"file unchanged since last parse ({file_dt} <= {tracked_dt})"
             except Exception as date_error:
                 logger.warning(f"Date parsing error for {filename}: {date_error}")
                 # If we can't parse dates, err on the side of parsing
                 needs_parsing = True
                 reason = "date parsing error - will parse to be safe"
         elif not file_last_modified:
-            # If we don't have file modification date, parse anyway
+            # If we don't have current file modification date, parse anyway
             needs_parsing = True
-            reason = "no modification date available"
+            reason = "no current modification date available"
         
         logger.info(f"  Decision: {'PARSE' if needs_parsing else 'SKIP'} - {reason}")
         

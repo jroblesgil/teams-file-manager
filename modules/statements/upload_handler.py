@@ -1,14 +1,16 @@
-# modules/statements/upload_handler.py
+# modules/statements/upload_handler.py - FIXED VERSION WITH INVENTORY REFRESH
 """
 Phase 1b: Clean Upload Handler for Unified Statements
-Auto-detects file types and routes to appropriate existing upload systems
+Auto-detects file types, uploads to correct locations, and updates calendar
+FIXED: Now includes immediate inventory refresh after upload
 """
 
 import re
 import logging
 import tempfile
 import os
-from typing import Dict, Any, Union
+import requests
+from typing import Dict, Any, Optional
 from werkzeug.datastructures import FileStorage
 
 from .config import UNIFIED_ACCOUNTS, get_account_by_identifier
@@ -16,29 +18,16 @@ from .config import UNIFIED_ACCOUNTS, get_account_by_identifier
 logger = logging.getLogger(__name__)
 
 class UnifiedUploadHandler:
-    """Clean upload handler with auto-detection"""
+    """Clean upload handler with auto-detection and calendar updates"""
     
     def __init__(self):
         self.logger = logging.getLogger(__name__ + '.UnifiedUploadHandler')
     
     def process_upload(self, file: FileStorage, access_token: str) -> Dict[str, Any]:
-        """
-        Process file upload with auto-detection
-        
-        Args:
-            file: Uploaded file
-            access_token: OAuth access token
-            
-        Returns:
-            Dict with upload result
-        """
+        """Process file upload with auto-detection"""
         
         if not file or not file.filename:
-            return {
-                'success': False,
-                'error': 'No file provided',
-                'filename': 'unknown'
-            }
+            return {'success': False, 'error': 'No file provided', 'filename': 'unknown'}
         
         filename = file.filename
         self.logger.info(f"Processing upload: {filename}")
@@ -50,12 +39,11 @@ class UnifiedUploadHandler:
             return {
                 'success': False,
                 'error': detection_result['error'],
-                'filename': filename,
-                'detection': detection_result
+                'filename': filename
             }
         
         file_info = detection_result['file_info']
-        self.logger.info(f"Detected {file_info['type']} file for account {file_info['account_id']}")
+        self.logger.info(f"Detected {file_info['type']} file for account {file_info.get('account_id', 'auto_detect')}")
         
         try:
             # Step 2: Route to appropriate upload handler
@@ -75,24 +63,14 @@ class UnifiedUploadHandler:
             return {
                 'success': False,
                 'error': f'Upload processing failed: {str(e)}',
-                'filename': filename,
-                'details': str(e)
+                'filename': filename
             }
     
     def _detect_file_type(self, filename: str) -> Dict[str, Any]:
-        """
-        Detect file type and extract metadata from filename
+        """Detect file type and extract metadata from filename"""
         
-        Returns:
-            Dict with success, file_info or error
-        """
-        
-        # Get file extension
         if '.' not in filename:
-            return {
-                'success': False,
-                'error': 'File must have an extension'
-            }
+            return {'success': False, 'error': 'File must have an extension'}
         
         extension = filename.split('.')[-1].lower()
         
@@ -106,22 +84,15 @@ class UnifiedUploadHandler:
             month = stp_match.group(3)
             file_ext = stp_match.group(4)
             
-            # Find account configuration
             account_id, account_config = get_account_by_identifier(account_number)
             
             if not account_config or account_config['type'] != 'stp':
-                return {
-                    'success': False,
-                    'error': f'Unknown STP account number: {account_number}'
-                }
+                return {'success': False, 'error': f'Unknown STP account number: {account_number}'}
             
             # Validate month
             month_num = int(month)
             if month_num < 1 or month_num > 12:
-                return {
-                    'success': False,
-                    'error': f'Invalid month: {month}. Must be 01-12'
-                }
+                return {'success': False, 'error': f'Invalid month: {month}. Must be 01-12'}
             
             return {
                 'success': True,
@@ -134,73 +105,28 @@ class UnifiedUploadHandler:
                     'month': month,
                     'extension': file_ext,
                     'folder_name': account_config['folder_name'],
-                    'expected_filename': filename  # STP uses exact filename format
+                    'expected_filename': filename
                 }
             }
         
-        # BBVA files: YYMM [AccountName] BBVA [Currency].pdf
-        # Also support auto-detection from PDF content
-        bbva_pattern = r'^(\d{4})\s+(.+?)\.pdf$'
-        bbva_match = re.match(bbva_pattern, filename)
-        
-        if bbva_match or extension == 'pdf':
-            if bbva_match:
-                yymm = bbva_match.group(1)
-                account_part = bbva_match.group(2).strip()
-                
-                # Find matching BBVA account by name pattern
-                matching_account = None
-                for account_id, account_config in UNIFIED_ACCOUNTS.items():
-                    if account_config['type'] == 'bbva':
-                        account_name = account_config['name']
-                        # Check if account name parts are in filename
-                        if any(part.lower() in account_part.lower() for part in account_name.split()):
-                            matching_account = (account_id, account_config)
-                            break
-                
-                if matching_account:
-                    account_id, account_config = matching_account
-                    return {
-                        'success': True,
-                        'file_info': {
-                            'type': 'bbva',
-                            'account_id': account_id,
-                            'clabe': account_config['identifier'],
-                            'account_name': account_config['name'],
-                            'year': '20' + yymm[:2],  # Convert YY to YYYY
-                            'month': yymm[2:],
-                            'extension': 'pdf',
-                            'folder_path': account_config['folder_path'],
-                            'auto_detected': False,
-                            'filename_pattern': 'standard'
-                        }
-                    }
-            
-            # If pattern doesn't match but it's a PDF, try auto-detection
-            if extension == 'pdf':
-                return {
-                    'success': True,
-                    'file_info': {
-                        'type': 'bbva',
-                        'account_id': 'auto_detect',
-                        'clabe': 'auto_detect',
-                        'account_name': 'Auto-detect from PDF content',
-                        'year': 'auto_detect',
-                        'month': 'auto_detect',
-                        'extension': 'pdf',
-                        'folder_path': 'auto_detect',
-                        'auto_detected': True,
-                        'filename_pattern': 'auto_detect'
-                    }
+        # BBVA files: Any PDF for auto-detection
+        if extension == 'pdf':
+            return {
+                'success': True,
+                'file_info': {
+                    'type': 'bbva',
+                    'account_id': 'auto_detect',
+                    'extension': 'pdf',
+                    'auto_detected': True
                 }
+            }
         
-        # No pattern matched
         return {
             'success': False,
             'error': (
                 'Unsupported file format. Expected:\n'
                 '• STP: ec-[account]-YYYYMM.xlsx/pdf\n'
-                '• BBVA: YYMM [AccountName].pdf or any PDF for auto-detection'
+                '• BBVA: Any PDF file for auto-detection'
             )
         }
     
@@ -209,21 +135,15 @@ class UnifiedUploadHandler:
         """Handle STP file upload using existing modules"""
         
         try:
-            # Import existing STP upload functionality
             from modules.stp.stp_files import upload_to_sharepoint
             
-            # Read file content
             file_content = file.read()
-            file.seek(0)  # Reset for potential future reads
+            file.seek(0)
             
             if not file_content:
-                return {
-                    'success': False,
-                    'error': 'File is empty',
-                    'filename': file.filename
-                }
+                return {'success': False, 'error': 'File is empty', 'filename': file.filename}
             
-            # Upload to SharePoint using existing function
+            # Upload to SharePoint
             success = upload_to_sharepoint(
                 filename=file_info['expected_filename'],
                 file_content=file_content,
@@ -232,8 +152,8 @@ class UnifiedUploadHandler:
             )
             
             if success:
-                # Clear cache to refresh data
-                self._clear_cache_if_available()
+                # FIXED: Clear cache and update calendar with access_token
+                self._clear_cache_and_update_calendar(file_info['account_id'], access_token)
                 
                 return {
                     'success': True,
@@ -249,8 +169,7 @@ class UnifiedUploadHandler:
                 return {
                     'success': False,
                     'error': 'SharePoint upload failed',
-                    'filename': file.filename,
-                    'details': 'Check SharePoint permissions and network connectivity'
+                    'filename': file.filename
                 }
                 
         except Exception as e:
@@ -263,12 +182,12 @@ class UnifiedUploadHandler:
     
     def _handle_bbva_upload(self, file: FileStorage, file_info: Dict[str, Any], 
                            access_token: str) -> Dict[str, Any]:
-        """Handle BBVA file upload using existing modules"""
+        """Handle BBVA file upload with auto-detection"""
+        
+        filename = file.filename
         
         try:
-            filename = file.filename
-            
-            # If auto-detection is needed, analyze PDF content
+            # Step 1: Auto-detect account from PDF content
             if file_info.get('auto_detected'):
                 detection_result = self._detect_bbva_from_content(file)
                 
@@ -276,61 +195,45 @@ class UnifiedUploadHandler:
                     return {
                         'success': False,
                         'error': detection_result['error'],
-                        'filename': filename,
-                        'details': 'Could not auto-detect BBVA account from PDF content'
-                    }
-                
-                # Update file_info with detected information
-                file_info.update(detection_result['detected_info'])
-            
-            # Try to use existing BBVA upload functionality if available
-            try:
-                from modules.bbva.bbva_upload import upload_bbva_to_sharepoint
-                
-                # Read file content
-                file_content = file.read()
-                file.seek(0)
-                
-                success = upload_bbva_to_sharepoint(
-                    filename=filename,
-                    file_content=file_content,
-                    clabe=file_info['clabe'],
-                    access_token=access_token
-                )
-                
-                if success:
-                    # Clear cache to refresh data
-                    self._clear_cache_if_available()
-                    
-                    return {
-                        'success': True,
-                        'message': f'Successfully uploaded to {file_info["account_name"]}',
-                        'filename': filename,
-                        'account_name': file_info['account_name'],
-                        'account_type': 'BBVA',
-                        'clabe': file_info['clabe'],
-                        'auto_detected': file_info.get('auto_detected', False)
-                    }
-                else:
-                    return {
-                        'success': False,
-                        'error': 'BBVA SharePoint upload failed',
                         'filename': filename
                     }
-                    
-            except ImportError:
-                # BBVA upload module not available yet - return validation success
-                self.logger.warning("BBVA upload module not available, returning validation-only result")
+                
+                file_info.update(detection_result['detected_info'])
+            
+            # Step 2: Read file content
+            file_content = file.read()
+            file.seek(0)
+            
+            if not file_content:
+                return {'success': False, 'error': 'File is empty', 'filename': filename}
+            
+            # Step 3: Upload to SharePoint using navigation method
+            upload_result = self._upload_bbva_to_sharepoint(
+                filename=filename,
+                file_content=file_content,
+                folder_path=file_info['folder_path'],
+                access_token=access_token
+            )
+            
+            if upload_result['success']:
+                # FIXED: Clear cache and update calendar with access_token
+                self._clear_cache_and_update_calendar(file_info['account_id'], access_token)
                 
                 return {
                     'success': True,
-                    'message': f'BBVA file validated successfully for {file_info["account_name"]}',
+                    'message': f'Successfully uploaded to {file_info["account_name"]}',
                     'filename': filename,
                     'account_name': file_info['account_name'],
                     'account_type': 'BBVA',
-                    'clabe': file_info.get('clabe', 'auto_detect'),
-                    'auto_detected': file_info.get('auto_detected', False),
-                    'note': 'File validated but upload functionality not yet available'
+                    'clabe': file_info['clabe'],
+                    'folder_path': file_info['folder_path'],
+                    'auto_detected': file_info.get('auto_detected', False)
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': f'SharePoint upload failed: {upload_result["error"]}',
+                    'filename': filename
                 }
                 
         except Exception as e:
@@ -338,64 +241,63 @@ class UnifiedUploadHandler:
             return {
                 'success': False,
                 'error': f'BBVA upload failed: {str(e)}',
-                'filename': file.filename
+                'filename': filename
             }
     
     def _detect_bbva_from_content(self, file: FileStorage) -> Dict[str, Any]:
-        """
-        Detect BBVA account information from PDF content
-        This would use the existing BBVA parser's PDF info extraction
-        """
+        """Auto-detect BBVA account from PDF content using existing BBVAParser"""
         
         try:
-            # Save file temporarily for PDF analysis
+            # Save to temp file
             with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
                 file.save(temp_file.name)
                 temp_path = temp_file.name
             
-            file.seek(0)  # Reset file pointer
+            file.seek(0)
             
             try:
-                # Use existing BBVA parser for PDF info extraction
+                # Use existing BBVAParser
                 from modules.bbva.bbva_parser import BBVAParser
+                import pdfplumber
                 
                 parser = BBVAParser()
                 
-                # Use PDF analysis to extract account info
-                with open(temp_path, 'rb') as f:
-                    import pdfplumber
-                    with pdfplumber.open(f) as pdf:
-                        # Use existing _extract_pdf_info method if available
-                        if hasattr(parser, '_extract_pdf_info'):
-                            pdf_info = parser._extract_pdf_info(pdf)
-                            
-                            clabe = pdf_info.get('clabe')
-                            if clabe:
-                                # Find account by CLABE
-                                account_id, account_config = get_account_by_identifier(clabe)
-                                
-                                if account_config and account_config['type'] == 'bbva':
-                                    return {
-                                        'success': True,
-                                        'detected_info': {
-                                            'account_id': account_id,
-                                            'clabe': clabe,
-                                            'account_name': account_config['name'],
-                                            'folder_path': account_config['folder_path'],
-                                            'year': pdf_info.get('period_year', 'unknown'),
-                                            'auto_detected': True
-                                        }
-                                    }
+                # Extract PDF info
+                with pdfplumber.open(temp_path) as pdf:
+                    pdf_info = parser._extract_pdf_info(pdf)
+                
+                clabe = pdf_info.get('clabe')
+                
+                if not clabe:
+                    return {
+                        'success': False,
+                        'error': 'Could not extract CLABE from PDF content'
+                    }
+                
+                # Find account by CLABE
+                account_id, account_config = get_account_by_identifier(clabe)
+                
+                if not account_config or account_config['type'] != 'bbva':
+                    return {
+                        'success': False,
+                        'error': f'CLABE {clabe} not found in BBVA configuration'
+                    }
                 
                 return {
-                    'success': False,
-                    'error': 'Could not extract CLABE from PDF or CLABE not recognized'
+                    'success': True,
+                    'detected_info': {
+                        'account_id': account_id,
+                        'clabe': clabe,
+                        'account_name': account_config['name'],
+                        'folder_path': account_config['folder_path'],
+                        'auto_detected': True
+                    }
                 }
                 
             except ImportError:
                 return {
                     'success': False,
-                    'error': 'BBVA PDF analysis not available - upload any PDF to BBVA folder manually'
+                    'error': 'BBVAParser not available - ensure pdfplumber is installed'
                 }
                 
         except Exception as e:
@@ -407,24 +309,212 @@ class UnifiedUploadHandler:
         finally:
             # Clean up temporary file
             try:
-                os.unlink(temp_path)
+                if 'temp_path' in locals():
+                    os.unlink(temp_path)
             except:
                 pass
     
-    def _clear_cache_if_available(self):
-        """Clear performance cache if available"""
+    def _upload_bbva_to_sharepoint(self, filename: str, file_content: bytes, 
+                                  folder_path: str, access_token: str) -> Dict[str, Any]:
+        """Upload BBVA file using navigation method (same as bbva_files.py)"""
+        
+        try:
+            headers = {'Authorization': f'Bearer {access_token}'}
+            
+            # Same constants as bbva_files.py
+            drive_id = "b!q3bruib_D0WIZS7yprZMBAUi_U53mb1KkFHHY5SmVTuIet9KaCuESqLv_QwsGcVu"
+            bancos_folder_id = "01YH7LZSZL4O2ZOMG4RVH2Y7NLUTM5M33V"
+            
+            # Navigate to target folder using same method as read system
+            estados_folder_id = self._get_estados_folder(bancos_folder_id, headers, drive_id)
+            if not estados_folder_id:
+                return {'success': False, 'error': 'Estados de Cuenta folder not found'}
+            
+            bbva_folder_id = self._get_bbva_folder(estados_folder_id, headers, drive_id)
+            if not bbva_folder_id:
+                return {'success': False, 'error': 'BBVA folder not found'}
+            
+            account_folder_id = self._get_account_folder(bbva_folder_id, folder_path, headers, drive_id)
+            if not account_folder_id:
+                return {'success': False, 'error': f'Account folder not found: {folder_path}'}
+            
+            # Upload file using folder ID
+            upload_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{account_folder_id}:/{filename}:/content"
+            
+            upload_headers = {
+                'Authorization': f'Bearer {access_token}',
+                'Content-Type': 'application/pdf'
+            }
+            
+            response = requests.put(upload_url, headers=upload_headers, data=file_content, timeout=30)
+            
+            if response.status_code in [200, 201]:
+                response_data = response.json()
+                return {
+                    'success': True,
+                    'details': {
+                        'file_id': response_data.get('id'),
+                        'size': response_data.get('size'),
+                        'web_url': response_data.get('webUrl')
+                    }
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': f"HTTP {response.status_code}: {response.text[:200]}"
+                }
+                
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Upload exception: {str(e)}'
+            }
+    
+    def _get_estados_folder(self, bancos_folder_id: str, headers: Dict, drive_id: str) -> Optional[str]:
+        """Get Estados de Cuenta folder ID"""
+        try:
+            url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{bancos_folder_id}/children"
+            response = requests.get(url, headers=headers)
+            
+            if response.status_code != 200:
+                return None
+            
+            items = response.json().get('value', [])
+            estados_folder = next(
+                (item for item in items 
+                 if item.get('folder') and 'estado' in item.get('name', '').lower()), 
+                None
+            )
+            
+            return estados_folder.get('id') if estados_folder else None
+            
+        except Exception:
+            return None
+    
+    def _get_bbva_folder(self, estados_folder_id: str, headers: Dict, drive_id: str) -> Optional[str]:
+        """Get BBVA folder ID"""
+        try:
+            url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{estados_folder_id}/children"
+            response = requests.get(url, headers=headers)
+            
+            if response.status_code != 200:
+                return None
+            
+            items = response.json().get('value', [])
+            bbva_folder = next(
+                (item for item in items 
+                 if item.get('folder') and 'bbva' in item.get('name', '').lower()), 
+                None
+            )
+            
+            return bbva_folder.get('id') if bbva_folder else None
+            
+        except Exception:
+            return None
+    
+    def _get_account_folder(self, bbva_folder_id: str, folder_path: str, headers: Dict, drive_id: str) -> Optional[str]:
+        """Navigate to account-specific folder"""
+        try:
+            # Extract relative path
+            if folder_path.startswith("Estados de Cuenta/BBVA/"):
+                relative_path = folder_path[len("Estados de Cuenta/BBVA/"):]
+            else:
+                relative_path = folder_path
+            
+            # Navigate through folder structure
+            current_folder_id = bbva_folder_id
+            path_parts = relative_path.split('/')
+            
+            for path_part in path_parts:
+                current_folder_id = self._find_subfolder(current_folder_id, path_part, headers, drive_id)
+                if not current_folder_id:
+                    return None
+            
+            return current_folder_id
+            
+        except Exception:
+            return None
+    
+    def _find_subfolder(self, parent_folder_id: str, folder_name: str, headers: Dict, drive_id: str) -> Optional[str]:
+        """Find specific subfolder"""
+        try:
+            url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{parent_folder_id}/children"
+            response = requests.get(url, headers=headers)
+            
+            if response.status_code != 200:
+                return None
+            
+            items = response.json().get('value', [])
+            target_folder = next(
+                (item for item in items 
+                 if item.get('folder') and item.get('name') == folder_name), 
+                None
+            )
+            
+            return target_folder.get('id') if target_folder else None
+            
+        except Exception:
+            return None
+    
+    def _clear_cache_and_update_calendar(self, account_id: str, access_token: str):
+        """FIXED: Clear cache and trigger inventory refresh after successful upload"""
+        
+        try:
+            # Step 1: Clear inventory manager cache
+            from .inventory_manager import InventoryManager
+            inventory_manager = InventoryManager()
+            inventory_manager.clear_cache()
+            self.logger.info("Cleared inventory manager cache after upload")
+            
+            # Step 2: Trigger immediate inventory refresh for this account
+            from .inventory_scanner import InventoryScanner
+            scanner = InventoryScanner()
+            
+            self.logger.info(f"Triggering inventory refresh for {account_id} after upload")
+            refresh_result = scanner.scan_single_account(account_id, access_token)
+            
+            if refresh_result.get('success'):
+                self.logger.info(f"Successfully refreshed inventory for {account_id} - found {refresh_result.get('files_found', 0)} files")
+            else:
+                self.logger.warning(f"Failed to refresh inventory for {account_id}: {refresh_result.get('error')}")
+                
+        except Exception as e:
+            self.logger.warning(f"Could not refresh inventory after upload: {e}")
+        
+        # Keep existing cache clearing code as fallback
         try:
             from modules.shared.performance_cache import unified_cache
             unified_cache.cache.clear()
-            self.logger.info("Cache cleared after upload")
+            self.logger.info("Cleared performance cache after upload")
         except ImportError:
-            self.logger.debug("Performance cache not available")
+            pass
+        
+        try:
+            # Clear inventory cache files for this account (legacy fallback)
+            import glob
+            
+            cache_patterns = [
+                f"*{account_id}*inventory*.json",
+                f"*inventory*{account_id}*.json", 
+                f"*inventory*.json",  # Clear all inventory files
+            ]
+            
+            for pattern in cache_patterns:
+                files = glob.glob(pattern)
+                for file_path in files:
+                    try:
+                        os.remove(file_path)
+                        self.logger.info(f"Removed inventory cache: {file_path}")
+                    except:
+                        pass
+                        
+        except Exception as e:
+            self.logger.debug(f"Could not clear inventory files: {e}")
+        
+        self.logger.info(f"Cache cleared and inventory refreshed for account {account_id}")
     
     def validate_file_format(self, filename: str) -> Dict[str, Any]:
-        """
-        Validate file format without processing upload
-        Useful for frontend validation
-        """
+        """Validate file format without processing upload"""
         return self._detect_file_type(filename)
     
     def get_supported_formats(self) -> Dict[str, Any]:
@@ -437,8 +527,8 @@ class UnifiedUploadHandler:
                 'description': 'STP Excel statements and PDF exports'
             },
             'bbva': {
-                'pattern': 'YYMM [AccountName].pdf or any PDF for auto-detection',
-                'example': '2501 FSA BBVA MXN.pdf',
+                'pattern': 'Any PDF file for auto-detection',
+                'example': '2508 FSA BBVA MXN.pdf',
                 'extensions': ['pdf'],
                 'description': 'BBVA PDF bank statements with auto-detection support'
             }

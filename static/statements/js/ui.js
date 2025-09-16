@@ -137,26 +137,56 @@ window.StatementsUI = {
     
     // Set parse status
     setParseStatus: function(elements, monthData) {
+        var accountRow = elements.cell.closest('[data-account-id]');
+        var accountType = accountRow ? accountRow.getAttribute('data-account-type') : 'unknown';
+        
+        if (accountType === 'stp') console.log('DEBUG monthData:', monthData); // SINGLE DEBUG LINE
+
         var isParsed = false;
         var totalTransactionCount = 0;
         
-        // Count transactions from both Excel and PDF if they exist
-        if (monthData.xlsx && monthData.xlsx.transaction_count) {
-            isParsed = true;
-            totalTransactionCount += monthData.xlsx.transaction_count;
+        // Get account type to handle STP differently
+        var accountRow = elements.cell.closest('[data-account-id]');
+        var accountType = accountRow ? accountRow.getAttribute('data-account-type') : 'unknown';
+        
+        // FIXED: For STP accounts, avoid double-counting transactions
+        if (accountType === 'stp') {
+            // For STP: Only count XLSX transactions to avoid duplication
+            // (PDF inherits the same count but shouldn't be added)
+            if (monthData.xlsx && (monthData.xlsx.transaction_count > 0 || monthData.xlsx.parse_status === 'parsed')) {
+                isParsed = true;
+                totalTransactionCount = monthData.xlsx.transaction_count;
+            }
+            // Check if PDF is also parsed (for icon status)
+            if (monthData.pdf && monthData.pdf.parse_status === 'parsed') {
+                isParsed = true;
+                // Don't add PDF count for STP - it's the same as XLSX
+            }
+        } else {
+            // For BBVA and other account types: Sum all file transactions
+            if (monthData.xlsx && (monthData.xlsx.transaction_count > 0 || monthData.xlsx.parse_status === 'parsed')) {
+                isParsed = true;
+                totalTransactionCount += monthData.xlsx.transaction_count;
+            }
+
+            if (monthData.pdf && (monthData.pdf.transaction_count > 0 || monthData.pdf.parse_status === 'parsed')) {
+                isParsed = true;
+                totalTransactionCount += monthData.pdf.transaction_count;
+            }
         }
         
-        if (monthData.pdf && monthData.pdf.transaction_count) {
+        // Also check if there's a transaction count at the root level (fallback)
+        if (!isParsed && monthData.transaction_count && monthData.transaction_count > 0) {
             isParsed = true;
-            totalTransactionCount += monthData.pdf.transaction_count;
+            totalTransactionCount = monthData.transaction_count;
         }
         
         elements.dbIcon.className = isParsed ? 'database-icon db-parsed' : 'database-icon db-loaded';
         elements.countElement.textContent = isParsed && totalTransactionCount > 0 ? this.formatCount(totalTransactionCount) : '-';
         
-        console.log('Parse status - isParsed:', isParsed, 'totalTransactions:', totalTransactionCount);
+        console.log('Parse status - accountType:', accountType, 'isParsed:', isParsed, 'totalTransactions:', totalTransactionCount);
     },
-    
+
     // Reset all UI elements
     resetAllUI: function() {
         window.StatementsApp.accountIds.forEach(function(accountId) {

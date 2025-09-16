@@ -10,6 +10,7 @@ import threading
 import time
 import os
 import tempfile
+import requests
 from pathlib import Path
 from datetime import datetime
 from flask import send_file, abort, request, jsonify, session
@@ -811,6 +812,162 @@ def register_routes(app):
         except Exception as e:
             logger.error(f"Error getting UI data: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
+            
+    @app.route('/api/statements/debug-upload', methods=['POST'])
+    @require_auth
+    def api_debug_upload():
+        """Debug upload process with detailed logging"""
+        try:
+            if 'files' not in request.files:
+                return jsonify({'success': False, 'error': 'No files provided'}), 400
+            
+            files = request.files.getlist('files')
+            if not files or files[0].filename == '':
+                return jsonify({'success': False, 'error': 'No files selected'}), 400
+            
+            access_token = session['access_token']
+            debug_info = []
+            
+            for file in files:
+                filename = file.filename
+                debug_step = {
+                    'filename': filename,
+                    'steps': [],
+                    'errors': []
+                }
+                
+                try:
+                    debug_step['steps'].append('1. Starting upload process')
+                    
+                    # Step 1: File type detection
+                    debug_step['steps'].append('2. Detecting file type...')
+                    detection_result = upload_handler._detect_file_type(filename)
+                    debug_step['detection_result'] = detection_result
+                    
+                    if not detection_result['success']:
+                        debug_step['errors'].append(f"Detection failed: {detection_result['error']}")
+                        debug_info.append(debug_step)
+                        continue
+                    
+                    file_info = detection_result['file_info']
+                    debug_step['file_info'] = file_info
+                    debug_step['steps'].append(f"3. Detected as {file_info['type']} file for {file_info.get('account_name', 'unknown')}")
+                    
+                    # Step 2: Check if BBVA
+                    if file_info['type'] == 'bbva':
+                        debug_step['steps'].append('4. Processing BBVA file...')
+                        
+                        # Read file content
+                        file_content = file.read()
+                        file.seek(0)
+                        debug_step['file_size'] = len(file_content)
+                        debug_step['steps'].append(f"5. Read {len(file_content)} bytes of file content")
+                        
+                        if not file_content:
+                            debug_step['errors'].append("File is empty")
+                            debug_info.append(debug_step)
+                            continue
+                        
+                        # Auto-detection if needed
+                        if file_info.get('auto_detected'):
+                            debug_step['steps'].append('6. Running auto-detection...')
+                            detection_result = upload_handler._detect_bbva_from_content(file)
+                            debug_step['auto_detection_result'] = detection_result
+                            
+                            if not detection_result['success']:
+                                debug_step['errors'].append(f"Auto-detection failed: {detection_result['error']}")
+                                debug_info.append(debug_step)
+                                continue
+                            
+                            file_info.update(detection_result['detected_info'])
+                            debug_step['updated_file_info'] = file_info
+                        
+                        # SharePoint upload attempt
+                        debug_step['steps'].append('7. Attempting SharePoint upload...')
+                        
+                        # Test SharePoint API access first
+                        drive_id = "b!q3bruib_D0WIZS7yprZMBAUi_U53mb1KkFHHY5SmVTuIet9KaCuESqLv_QwsGcVu"
+                        test_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}"
+                        test_headers = {'Authorization': f'Bearer {access_token}'}
+                        
+                        debug_step['steps'].append('8. Testing SharePoint access...')
+                        test_response = requests.get(test_url, headers=test_headers)
+                        debug_step['sharepoint_access_test'] = {
+                            'status_code': test_response.status_code,
+                            'success': test_response.status_code == 200
+                        }
+                        
+                        if test_response.status_code != 200:
+                            debug_step['errors'].append(f"SharePoint access failed: {test_response.status_code}")
+                            debug_info.append(debug_step)
+                            continue
+                        
+                        # Construct upload URL
+                        folder_path = file_info['folder_path']
+                        encoded_path = folder_path.replace(' ', '%20').replace('/', '%2F')
+                        encoded_filename = filename.replace(' ', '%20')
+                        
+                        upload_url = (
+                            f"https://graph.microsoft.com/v1.0/drives/{drive_id}/"
+                            f"root:/{encoded_path}/{encoded_filename}:/content"
+                        )
+                        
+                        debug_step['upload_url'] = upload_url
+                        debug_step['steps'].append(f"9. Upload URL: {upload_url}")
+                        
+                        # Attempt upload
+                        upload_headers = {
+                            'Authorization': f'Bearer {access_token}',
+                            'Content-Type': 'application/pdf'
+                        }
+                        
+                        debug_step['steps'].append('10. Making upload request...')
+                        upload_response = requests.put(upload_url, headers=upload_headers, data=file_content)
+                        
+                        debug_step['upload_response'] = {
+                            'status_code': upload_response.status_code,
+                            'success': upload_response.status_code in [200, 201],
+                            'response_text': upload_response.text[:500] if upload_response.text else None
+                        }
+                        
+                        if upload_response.status_code in [200, 201]:
+                            debug_step['steps'].append('11. Upload successful!')
+                            try:
+                                response_data = upload_response.json()
+                                debug_step['upload_details'] = {
+                                    'file_id': response_data.get('id'),
+                                    'size': response_data.get('size'),
+                                    'web_url': response_data.get('webUrl')
+                                }
+                            except:
+                                debug_step['upload_details'] = 'Could not parse response JSON'
+                        else:
+                            debug_step['errors'].append(f"Upload failed: {upload_response.status_code} - {upload_response.text[:200]}")
+                    
+                    else:
+                        debug_step['steps'].append('4. Non-BBVA file - skipping detailed debug')
+                    
+                except Exception as e:
+                    debug_step['errors'].append(f"Exception: {str(e)}")
+                    import traceback
+                    debug_step['exception_traceback'] = traceback.format_exc()
+                
+                debug_info.append(debug_step)
+            
+            return jsonify({
+                'success': True,
+                'debug_info': debug_info,
+                'timestamp': datetime.now().isoformat()
+            })
+            
+        except Exception as e:
+            logger.error(f"Debug upload error: {e}")
+            import traceback
+            return jsonify({
+                'success': False,
+                'error': str(e),
+                'traceback': traceback.format_exc()
+            }), 500
 
 def get_statements_route_info():
     """Get information about registered routes"""

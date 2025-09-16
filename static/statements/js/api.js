@@ -32,12 +32,84 @@ window.StatementsAPI = {
         });
     },
     
-    // Parse account row
     parseAccount: function(accountId) {
-        // TODO: Implement parsing API call
-        console.log('Parse account:', accountId);
+        return new Promise(function(resolve, reject) {
+            console.log('=== STARTING PARSE API CALL ===');
+            console.log('Account ID:', accountId);
+            
+            // Make POST request to parse endpoint
+            fetch('/api/statements/parse/' + accountId, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(function(response) {
+                console.log('Parse API response status:', response.status);
+                
+                // Handle authentication errors
+                if (response.status === 401 || response.status === 403) {
+                    window.location.href = '/login';
+                    return;
+                }
+                
+                if (!response.ok) {
+                    throw new Error('Parse request failed with status ' + response.status + ': ' + response.statusText);
+                }
+                
+                return response.json();
+            })
+            .then(function(data) {
+                console.log('Parse API response data:', data);
+                
+                if (data.success && data.session_id) {
+                    // Return session ID for progress tracking
+                    resolve({
+                        success: true,
+                        session_id: data.session_id,
+                        message: data.message || 'Parse operation started'
+                    });
+                } else {
+                    throw new Error(data.error || 'Failed to start parse operation');
+                }
+            })
+            .catch(function(error) {
+                console.error('Parse API error:', error);
+                reject(error);
+            });
+        });
     },
-    
+
+    // Get parse progress using session ID
+    getParseProgress: function(sessionId) {
+        return new Promise(function(resolve, reject) {
+            fetch('/api/statements/parse-progress/' + sessionId)
+            .then(function(response) {
+                if (response.status === 401 || response.status === 403) {
+                    window.location.href = '/login';
+                    return;
+                }
+                
+                if (!response.ok) {
+                    throw new Error('Failed to get progress: HTTP ' + response.status);
+                }
+                
+                return response.json();
+            })
+            .then(function(data) {
+                if (data.success && data.progress) {
+                    resolve(data.progress);
+                } else {
+                    throw new Error(data.error || 'Failed to get parse progress');
+                }
+            })
+            .catch(function(error) {
+                console.error('Progress API error:', error);
+                reject(error);
+            });
+        });
+    },    
+
     // UPLOAD FUNCTIONALITY - IMPLEMENTED
     uploadFiles: function(formData) {
         return new Promise(function(resolve, reject) {

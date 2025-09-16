@@ -1,4 +1,4 @@
-<div class="control-bar">
+<d<div class="control-bar">
     <div class="row align-items-center">
         <div class="col-md-6">
             <div class="d-flex align-items-center gap-2">
@@ -16,9 +16,9 @@
         </div>
         <div class="col-md-6">
             <div class="d-flex justify-content-end gap-2">
-                <a href="{{ url_for('statements_year', year=year) }}upload" class="btn btn-primary btn-sm">
+                <button class="btn btn-primary btn-sm" onclick="uploadToTeams()">
                     <i class="fas fa-upload me-1"></i>Upload Files
-                </a>
+                </button>
                 <form method="post" action="{{ url_for('refresh_calendar', year=year) }}" class="d-inline">
                     <button type="submit" class="btn btn-success btn-sm">
                         <i class="fas fa-sync-alt me-1"></i>Refresh Calendar

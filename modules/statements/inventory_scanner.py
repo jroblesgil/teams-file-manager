@@ -228,7 +228,7 @@ class InventoryScanner:
             return None
     
     def _scan_stp_account(self, account_id: str, account_config: Dict[str, Any],
-                         access_token: str) -> Optional[Dict[str, Any]]:
+                        access_token: str) -> Optional[Dict[str, Any]]:
         """Scan STP account using existing modules"""
         try:
             # Import existing STP modules
@@ -252,6 +252,11 @@ class InventoryScanner:
             try:
                 tracking_data = get_parse_tracking_data(access_token)
                 account_tracking = tracking_data.get(account_number, {})
+                
+                print(f"DEBUG STP: account_number = {account_number}")
+                print(f"DEBUG STP: tracking_data keys = {list(tracking_data.keys())}")
+                print(f"DEBUG STP: account_tracking = {account_tracking}")
+                
             except Exception as e:
                 self.logger.warning(f"Could not load parse tracking for {account_id}: {e}")
                 account_tracking = {}
@@ -277,7 +282,7 @@ class InventoryScanner:
                     
                     # Find files for this month
                     pdf_file = next((f for f in all_files 
-                                   if f.get('date_string') == month_key and f.get('extension') == 'pdf'), None)
+                                if f.get('date_string') == month_key and f.get('extension') == 'pdf'), None)
                     xlsx_file = next((f for f in all_files 
                                     if f.get('date_string') == month_key and f.get('extension') == 'xlsx'), None)
                     
@@ -298,6 +303,15 @@ class InventoryScanner:
                     # Only add month if it has files
                     if month_data:
                         inventory[month_key] = month_data
+                        
+                        # DEBUG: Check for duplication in inventory
+                        if month_data.get('pdf') and month_data.get('xlsx'):
+                            pdf_count = month_data['pdf'].get('transaction_count', 0)
+                            xlsx_count = month_data['xlsx'].get('transaction_count', 0)
+                            print(f"INVENTORY DEBUG {account_id} {month_key}: PDF={pdf_count}, XLSX={xlsx_count}")
+                            
+                            if pdf_count > 0 and xlsx_count > 0:
+                                print(f"WARNING: Both PDF and XLSX have transaction counts - potential duplication!")
             
             self.logger.info(f"STP scan complete for {account_id}: {len(inventory)} months with files")
             return inventory
@@ -305,7 +319,7 @@ class InventoryScanner:
         except Exception as e:
             self.logger.error(f"Error scanning STP account {account_id}: {e}")
             return None
-    
+
     def _scan_bbva_account(self, account_id: str, account_config: Dict[str, Any],
                           access_token: str) -> Optional[Dict[str, Any]]:
         """Scan BBVA account using existing modules"""
@@ -378,24 +392,24 @@ class InventoryScanner:
         except Exception as e:
             self.logger.error(f"Error scanning BBVA account {account_id}: {e}")
             return None
-    
+
     def _create_file_info(self, file_data: Dict[str, Any], tracking_data: Dict[str, Any],
-                         file_type: str) -> Dict[str, Any]:
-        """
-        Create file info structure from file data and tracking data
-        
-        Args:
-            file_data: File information from SharePoint
-            tracking_data: Parse tracking data for this account
-            file_type: 'pdf' or 'xlsx'
-            
-        Returns:
-            Dict containing file information
-        """
+                        file_type: str) -> Dict[str, Any]:
         filename = file_data.get('filename', '')
+        print(f"SCANNER DEBUG: Processing {filename}, file_type={file_type}")
         
         # Get tracking info for this file
         file_tracking = tracking_data.get(filename, {})
+        
+        # FIXED: For STP PDF files, inherit tracking data from corresponding XLSX files
+        inherited_from_xlsx = False
+        if not file_tracking and filename.endswith('.pdf'):
+            # Convert PDF filename to XLSX filename to find tracking data
+            xlsx_filename = filename.replace('.pdf', '.xlsx')
+            file_tracking = tracking_data.get(xlsx_filename, {})
+            if file_tracking:
+                inherited_from_xlsx = True
+                self.logger.debug(f"PDF file {filename} inheriting parse status from XLSX {xlsx_filename}")
         
         # Determine parse status and transaction count
         parse_status = 'not_parsed'
@@ -404,9 +418,17 @@ class InventoryScanner:
         if file_tracking:
             if file_tracking.get('parse_status') == 'success':
                 parse_status = 'parsed'
-                transaction_count = file_tracking.get('transaction_count', 0)
+                # FIXED: For STP PDF files that inherited from XLSX, don't copy transaction count
+                # This prevents duplication since PDF and XLSX would have the same count
+                if inherited_from_xlsx:
+                    transaction_count = 0  # Avoid duplication - PDF inherits status but not count
+                    self.logger.debug(f"PDF file {filename} set to 0 transactions to avoid duplication")
+                else:
+                    transaction_count = file_tracking.get('transaction_count', 0)
             elif file_tracking.get('parse_status') == 'error':
                 parse_status = 'error'
+                # Error files have 0 transactions regardless
+                transaction_count = 0
         
         return {
             'exists': True,

@@ -105,70 +105,126 @@ class UnifiedDataLoader:
         except Exception as e:
             self.logger.warning(f"Auth check failed: {e}")
             return False
-    
+
     def _convert_inventory_to_display_format(self, account_id: str, account_config: Dict[str, Any], 
-                                           account_inventory: Dict[str, Any], year: int) -> Dict[str, Any]:
+                                            account_inventory: Dict[str, Any], year: int) -> Dict[str, Any]:
         """
-        Convert inventory format to the display format expected by templates
+        Convert inventory data to display format with STP duplication fix
+        
+        Args:
+            account_id: Account identifier
+            account_config: Account configuration 
+            account_inventory: Raw inventory data for the account
+            year: Year to filter data for
+            
+        Returns:
+            Dict in display format
         """
-        # Filter inventory data for the requested year
-        year_months = {}
+        
+        # Initialize counters
         total_files = 0
         total_transactions = 0
         parsed_months = 0
+        months_data = {}
         
-        for month in range(1, 13):
-            month_key = f"{year}-{month:02d}"
-            month_inventory = account_inventory.get(month_key, {})
-            
-            if not month_inventory:
-                # No data for this month
+        print(f"DEBUG DATA LOADER: Converting inventory for {account_id} (type: {account_config['type']})")
+        
+        # Filter inventory data to only include the requested year
+        year_inventory = {}
+        for month_key, month_data in account_inventory.items():
+            if isinstance(month_data, dict) and month_key.startswith(str(year)):
+                year_inventory[month_key] = month_data
+        
+        # Process each month for the specified year
+        for month_key, month_data in year_inventory.items():
+            if not isinstance(month_data, dict):
                 continue
+                
+            # Extract file data
+            pdf_data = month_data.get('pdf', {})
+            xlsx_data = month_data.get('xlsx', {})
             
-            # Process PDF and XLSX files
-            pdf_data = month_inventory.get('pdf', {})
-            xlsx_data = month_inventory.get('xlsx', {})
+            print(f"DEBUG DATA LOADER {account_id} {month_key}:")
+            print(f"  PDF data: {pdf_data}")
+            print(f"  XLSX data: {xlsx_data}")
             
-            # Create month data structure
-            month_data = {
-                'month_name': self._get_month_name(month),
-                'pdf': self._convert_file_info(pdf_data) if pdf_data.get('exists') else None,
-                'xlsx': self._convert_file_info(xlsx_data) if xlsx_data.get('exists') else None,
-                'status': self._determine_month_status(pdf_data, xlsx_data, account_config['type']),
-                'file_count': sum(1 for f in [pdf_data, xlsx_data] if f.get('exists')),
-                'has_files': any(f.get('exists') for f in [pdf_data, xlsx_data])
-            }
-            
-            year_months[month_key] = month_data
-            
-            # Update totals
+            # FIXED: Update totals without duplicating STP transaction counts
             if pdf_data.get('exists'):
                 total_files += 1
-                total_transactions += pdf_data.get('transaction_count', 0)
+                # For STP accounts, don't count PDF transactions (they inherit from XLSX)
+                if account_config['type'] != 'stp':
+                    pdf_transactions = pdf_data.get('transaction_count', 0)
+                    total_transactions += pdf_transactions
+                    print(f"  Adding PDF transactions (non-STP): {pdf_transactions}")
+                else:
+                    print(f"  Skipping PDF transactions for STP account")
+
             if xlsx_data.get('exists'):
                 total_files += 1
-                total_transactions += xlsx_data.get('transaction_count', 0)
+                # Always count XLSX transactions (primary source for STP, only source for others)
+                xlsx_transactions = xlsx_data.get('transaction_count', 0)
+                total_transactions += xlsx_transactions
+                print(f"  Adding XLSX transactions: {xlsx_transactions}")
             
-            # Count parsed months
-            if month_data['status'] == 'complete':
-                parsed_months += 1
+            # Check what's being added to totals for this month
+            month_pdf_count = pdf_data.get('transaction_count', 0) if pdf_data.get('exists') else 0
+            month_xlsx_count = xlsx_data.get('transaction_count', 0) if xlsx_data.get('exists') else 0
+            
+            if account_config['type'] == 'stp':
+                month_total_added = month_xlsx_count  # Only XLSX for STP
+            else:
+                month_total_added = month_pdf_count + month_xlsx_count  # Both for non-STP
+                
+            print(f"  Month total transactions added: {month_total_added}")
+            
+            # Determine month status
+            month_status = 'missing'
+            if pdf_data.get('exists') or xlsx_data.get('exists'):
+                # Check if any files are parsed
+                pdf_parsed = pdf_data.get('parse_status') == 'parsed'
+                xlsx_parsed = xlsx_data.get('parse_status') == 'parsed'
+                
+                if pdf_parsed or xlsx_parsed:
+                    month_status = 'complete'
+                    parsed_months += 1
+                else:
+                    month_status = 'partial'
+            
+            # Convert month key to month number for frontend
+            try:
+                month_num = int(month_key.split('-')[1])
+                months_data[month_key] = {
+                    'month': month_num,
+                    'status': month_status,
+                    'pdf': pdf_data if pdf_data.get('exists') else None,
+                    'xlsx': xlsx_data if xlsx_data.get('exists') else None,
+                    'file_count': (1 if pdf_data.get('exists') else 0) + (1 if xlsx_data.get('exists') else 0)
+                }
+            except (ValueError, IndexError):
+                continue
         
-        # Determine last updated from inventory
-        last_updated = account_inventory.get('last_updated', 'From inventory')
-        if not last_updated or last_updated == 'From inventory':
-            # Find the most recent file modification
-            latest_date = None
-            for month_data in account_inventory.values():
-                for file_data in month_data.values():
-                    if isinstance(file_data, dict) and file_data.get('last_modified'):
-                        try:
-                            file_date = datetime.fromisoformat(file_data['last_modified'].replace(' ', 'T'))
-                            if latest_date is None or file_date > latest_date:
-                                latest_date = file_date
-                        except (ValueError, AttributeError):
-                            continue
+        # Determine if account has transactions
+        has_transactions = total_transactions > 0
+        
+        # Determine last updated
+        last_updated = 'Never'
+        if months_data:
+            # Find most recent file modification time
+            latest_times = []
+            for month_data in months_data.values():
+                for file_type in ['pdf', 'xlsx']:
+                    file_data = month_data.get(file_type)
+                    if file_data and file_data.get('last_modified'):
+                        latest_times.append(file_data['last_modified'])
             
-            last_updated = latest_date.isoformat() if latest_date else 'Unknown'
+            if latest_times:
+                last_updated = max(latest_times)
+        
+        print(f"DEBUG DATA LOADER {account_id} FINAL TOTALS:")
+        print(f"  Total files: {total_files}")
+        print(f"  Total transactions: {total_transactions}")
+        print(f"  Parsed months: {parsed_months}")
+        print(f"  Has transactions: {has_transactions}")
         
         return {
             'type': account_config['type'],
@@ -179,14 +235,13 @@ class UnifiedDataLoader:
             'total_files': total_files,
             'total_transactions': total_transactions,
             'parsed_months': parsed_months,
-            'months': year_months,
+            'months': months_data,
             'last_updated': last_updated,
-            'has_transactions': total_transactions > 0,
+            'has_transactions': has_transactions,
             'status': 'loaded',
-            'files_loaded': True,
-            'data_source': 'inventory'  # Flag to indicate source
+            'files_loaded': True
         }
-    
+
     def _convert_file_info(self, file_data: Dict[str, Any]) -> Dict[str, Any]:
         """Convert inventory file format to display format"""
         if not file_data or not file_data.get('exists'):
@@ -297,14 +352,17 @@ class UnifiedDataLoader:
                     
                     all_months[month_key] = display_month_data
                     
-                    # Update totals
+                    # Update totals - FIXED for STP duplication
                     if pdf_data.get('exists'):
                         total_files += 1
-                        total_transactions += pdf_data.get('transaction_count', 0)
+                        # For STP accounts, don't count PDF transactions (they inherit from XLSX)
+                        if account_config['type'] != 'stp':
+                            total_transactions += pdf_data.get('transaction_count', 0)
+                            
                     if xlsx_data.get('exists'):
                         total_files += 1
-                        total_transactions += xlsx_data.get('transaction_count', 0)
-            
+                        # Always count XLSX transactions (primary source for STP, only source for others)
+                        total_transactions += xlsx_data.get('transaction_count', 0)            
             return {
                 'type': account_config['type'],
                 'name': account_config['name'],

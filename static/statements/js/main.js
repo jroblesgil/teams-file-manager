@@ -1,4 +1,7 @@
-// Complete main.js file with upload functionality
+// Complete main.js file with upload functionality - FIXED VERSION
+// Store files globally for drag-and-drop
+var selectedFiles = null;
+
 function refreshAccountInventory(accountId) {
     var loadBtn = document.getElementById('load-btn-' + accountId);
     if (loadBtn) {
@@ -227,6 +230,12 @@ function showUploadModal() {
     // Clean up after modal is hidden
     document.getElementById('uploadModal').addEventListener('hidden.bs.modal', function() {
         console.log('Upload modal closed, cleaning up...');
+        // Reset file selection
+        selectedFiles = null;
+        var fileInput = document.getElementById('fileInput');
+        if (fileInput) {
+            fileInput.value = '';
+        }
         this.remove();
     });
     
@@ -270,6 +279,8 @@ function handleFileDrop(event) {
     
     var files = event.dataTransfer.files;
     if (files.length > 0) {
+        // Store files globally since we can't set fileInput.files directly
+        selectedFiles = files;
         displaySelectedFiles(files);
     }
 }
@@ -278,6 +289,8 @@ function handleFileSelection() {
     var fileInput = document.getElementById('fileInput');
     if (fileInput.files.length > 0) {
         console.log('Files selected via browse:', fileInput.files.length);
+        // For browse selection, use fileInput.files directly
+        selectedFiles = fileInput.files;
         displaySelectedFiles(fileInput.files);
     }
 }
@@ -418,136 +431,284 @@ function validateUploadFile(file) {
     };
 }
 
+
 function startUpload() {
-    console.log('=== STARTING UPLOAD PROCESS ===');
+    console.log('=== START UPLOAD (FIXED VERSION) ===');
     
     var fileInput = document.getElementById('fileInput');
     var uploadProgress = document.getElementById('uploadProgress');
-    var uploadProgressBar = document.getElementById('uploadProgressBar');
     var uploadStatus = document.getElementById('uploadStatus');
     var uploadBtn = document.getElementById('uploadBtn');
-    var cancelBtn = document.getElementById('cancelBtn');
-    var selectedFilesSection = document.getElementById('selectedFilesSection');
+    var cancelBtn = document.querySelector('#uploadModal .btn-secondary');
     
-    if (!fileInput.files.length) {
-        window.StatementsUI.showAlert('warning', 'No files selected');
+    // Check if elements exist
+    if (!fileInput) {
+        console.error('File input not found');
+        alert('Error: File input not found on page');
         return;
     }
     
-    // Show progress section
-    uploadProgress.style.display = 'block';
-    selectedFilesSection.style.display = 'none';
+    // FIXED: Use global selectedFiles (drag-and-drop) OR fileInput.files (browse)
+    var filesToUpload = selectedFiles || fileInput.files;
     
-    // Disable buttons
-    uploadBtn.disabled = true;
-    uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Uploading...';
-    cancelBtn.disabled = true;
+    console.log('Selected files (global):', selectedFiles);
+    console.log('File input files:', fileInput.files);
+    console.log('Files to upload:', filesToUpload);
+    console.log('Number of files to upload:', filesToUpload ? filesToUpload.length : 0);
     
-    // Update progress
-    uploadProgressBar.style.width = '10%';
-    uploadStatus.textContent = 'Preparing files for upload...';
+    if (!filesToUpload || filesToUpload.length === 0) {
+        console.error('No files to upload');
+        alert('Please select files to upload');
+        return;
+    }
     
-    // Create FormData
+    // Log each file being uploaded
+    console.log('Files being uploaded:');
+    Array.from(filesToUpload).forEach(function(file, index) {
+        console.log(`  ${index + 1}. ${file.name} (${file.size} bytes)`);
+    });
+    
+    // Show progress (with null checks)
+    if (uploadProgress) {
+        uploadProgress.style.display = 'block';
+    }
+    
+    if (uploadBtn) {
+        uploadBtn.disabled = true;
+    }
+    
+    if (cancelBtn) {
+        cancelBtn.disabled = true;
+    }
+    
+    // Create FormData using the correct files
     var formData = new FormData();
-    Array.from(fileInput.files).forEach(function(file) {
+    Array.from(filesToUpload).forEach(function(file, index) {
+        console.log(`Adding file ${index + 1} to FormData: ${file.name}`);
         formData.append('files', file);
     });
     
-    uploadStatus.textContent = 'Uploading files to server...';
-    uploadProgressBar.style.width = '50%';
+    if (uploadStatus) {
+        uploadStatus.textContent = 'Uploading files...';
+    }
     
-    // Upload via API
-    window.StatementsAPI.uploadFiles(formData)
-        .then(function(data) {
-            console.log('Upload completed:', data);
-            
-            uploadProgressBar.style.width = '100%';
-            uploadProgressBar.classList.add('bg-success');
-            uploadStatus.textContent = 'Upload completed successfully!';
-            
-            // Show results
-            showUploadResults(data);
-            
-            // Re-enable cancel button
-            cancelBtn.disabled = false;
-            cancelBtn.innerHTML = '<i class="fas fa-check me-1"></i>Close';
-            
-            // Suggest page refresh if uploads were successful
-            if (data.success && data.successful_uploads > 0) {
-                setTimeout(function() {
-                    if (confirm('Files uploaded successfully! Refresh the page to see new files?')) {
-                        window.location.reload();
-                    }
-                }, 2000);
-            }
-        })
-        .catch(function(error) {
-            console.error('Upload failed:', error);
-            
-            uploadProgressBar.classList.add('bg-danger');
+    // Update progress bar
+    var progressBar = document.getElementById('uploadProgressBar');
+    if (progressBar) {
+        progressBar.style.width = '20%';
+        progressBar.className = 'progress-bar bg-primary';
+    }
+    
+    console.log('Making fetch request to /api/statements/upload');
+    
+    fetch('/api/statements/upload', {
+        method: 'POST',
+        body: formData
+    })
+    .then(function(response) {
+        console.log('Upload response status:', response.status);
+        
+        if (uploadStatus) {
+            uploadStatus.textContent = 'Processing response...';
+        }
+        
+        if (progressBar) {
+            progressBar.style.width = '60%';
+        }
+        
+        if (!response.ok) {
+            throw new Error('Upload failed: HTTP ' + response.status);
+        }
+        return response.json();
+    })
+    .then(function(data) {
+        console.log('Upload completed successfully:', data);
+        
+        if (uploadStatus) {
+            uploadStatus.textContent = 'Upload completed!';
+        }
+        
+        if (progressBar) {
+            progressBar.style.width = '100%';
+            progressBar.className = 'progress-bar bg-success';
+        }
+        
+        // Show results
+        showUploadResults(data);
+        
+        // Store results for calendar refresh
+        storeUploadResults(data);
+        
+        // Clear selected files after successful upload
+        selectedFiles = null;
+        if (fileInput) {
+            fileInput.value = '';
+        }
+        
+    })
+    .catch(function(error) {
+        console.error('Upload error:', error);
+        
+        if (uploadStatus) {
             uploadStatus.textContent = 'Upload failed: ' + error.message;
-            
-            showUploadResults({
-                success: false,
-                error: error.message,
-                total_files: fileInput.files.length,
-                successful_uploads: 0,
-                failed_uploads: fileInput.files.length
-            });
-            
-            // Re-enable buttons
-            uploadBtn.disabled = false;
-            uploadBtn.innerHTML = '<i class="fas fa-upload me-1"></i>Retry Upload';
-            cancelBtn.disabled = false;
+        }
+        
+        if (progressBar) {
+            progressBar.style.width = '100%';
+            progressBar.className = 'progress-bar bg-danger';
+        }
+        
+        // Show error results
+        showUploadResults({
+            success: false,
+            error: error.message,
+            total_files: filesToUpload.length,
+            successful_uploads: 0,
+            failed_uploads: filesToUpload.length,
+            results: []
         });
+    })
+    .finally(function() {
+        console.log('Upload process finished');
+        
+        if (cancelBtn) {
+            cancelBtn.disabled = false;
+            cancelBtn.innerHTML = '<i class="fas fa-times me-1"></i>Close';
+        }
+    });
 }
 
 function showUploadResults(data) {
     var uploadResults = document.getElementById('uploadResults');
-    var uploadResultsList = document.getElementById('uploadResultsList');
+    var resultsList = document.getElementById('uploadResultsList');
     
-    if (!uploadResults || !uploadResultsList) return;
-    
-    var alertClass = data.success ? 'alert-success' : 'alert-danger';
-    var iconClass = data.success ? 'fa-check-circle' : 'fa-exclamation-triangle';
+    // Check if elements exist
+    if (!uploadResults || !resultsList) {
+        console.error('Upload results elements not found');
+        // Fallback to alert
+        if (data.success) {
+            alert(`Upload successful! ${data.successful_uploads || 0} files uploaded.`);
+        } else {
+            alert(`Upload failed: ${data.error || 'Unknown error'}`);
+        }
+        return;
+    }
     
     var summaryHtml = `
-        <div class="alert ${alertClass}" role="alert">
+        <div class="alert alert-${data.success ? 'success' : 'danger'}" role="alert">
             <h6 class="alert-heading">
-                <i class="fas ${iconClass} me-2"></i>
+                <i class="fas fa-${data.success ? 'check-circle' : 'exclamation-triangle'} me-2"></i>
                 Upload ${data.success ? 'Completed' : 'Failed'}
             </h6>
             <p class="mb-0">
                 ${data.successful_uploads || 0} of ${data.total_files || 0} files uploaded successfully.
-                ${data.failed_uploads > 0 ? ` ${data.failed_uploads} files failed.` : ''}
+                ${data.failed_uploads > 0 ? `${data.failed_uploads} files failed.` : ''}
             </p>
         </div>
     `;
     
-    // Add individual file results if available
     if (data.results && data.results.length > 0) {
-        summaryHtml += '<div class="mt-2">';
+        summaryHtml += '<div class="list-group mt-2">';
         data.results.forEach(function(result) {
-            var resultIcon = result.success ? 'fa-check-circle text-success' : 'fa-times-circle text-danger';
+            var iconClass = result.success ? 'fa-check-circle text-success' : 'fa-times-circle text-danger';
             var message = result.success ? 
-                `Uploaded to ${result.account_name || result.account_type || 'account'}` : 
+                `Uploaded to ${result.account_name || 'account'}` : 
                 `Failed: ${result.error || 'Unknown error'}`;
                 
             summaryHtml += `
-                <div class="border rounded p-2 mb-1 d-flex justify-content-between align-items-center">
+                <div class="list-group-item d-flex justify-content-between align-items-center">
                     <div>
                         <strong>${result.filename || 'Unknown file'}</strong>
                         <small class="text-muted d-block">${message}</small>
                     </div>
-                    <i class="fas ${resultIcon}"></i>
+                    <i class="fas ${iconClass}"></i>
                 </div>
             `;
         });
         summaryHtml += '</div>';
     }
     
-    uploadResultsList.innerHTML = summaryHtml;
+    resultsList.innerHTML = summaryHtml;
     uploadResults.style.display = 'block';
+    
+    // If upload was successful, automatically refresh calendar
+    if (data.success && data.successful_uploads > 0) {
+        // Show immediate feedback
+        if (window.StatementsUI && window.StatementsUI.showAlert) {
+            window.StatementsUI.showAlert('info', 'Files uploaded successfully! Refreshing calendar...');
+        }
+        
+        // Refresh calendar for affected accounts
+        refreshCalendarForUploadedFiles(data.results);
+    }
+}
+
+function validateSelectedFiles() {
+    var fileInput = document.getElementById('fileInput');
+    var filePreview = document.getElementById('filePreview');
+    var fileList = document.getElementById('fileList');
+    var uploadBtn = document.getElementById('uploadBtn');
+    
+    // Check if elements exist
+    if (!fileInput || !filePreview || !fileList || !uploadBtn) {
+        console.error('Upload modal elements not found');
+        return;
+    }
+    
+    if (fileInput.files.length === 0) {
+        filePreview.style.display = 'none';
+        uploadBtn.disabled = true;
+        return;
+    }
+    
+    fileList.innerHTML = '';
+    var validFiles = 0;
+    
+    Array.from(fileInput.files).forEach(function(file, index) {
+        var listItem = document.createElement('div');
+        listItem.className = 'list-group-item d-flex justify-content-between align-items-center';
+        
+        // Validate file type
+        var isValid = file.name.toLowerCase().match(/\.(pdf|xlsx|xls)$/);
+        var icon = 'fa-file';
+        var badgeClass = 'secondary';
+        var statusText = 'Unknown format';
+        
+        if (file.name.toLowerCase().endsWith('.pdf')) {
+            icon = 'fa-file-pdf';
+            badgeClass = 'danger';
+            statusText = 'PDF';
+        } else if (file.name.toLowerCase().match(/\.(xlsx|xls)$/)) {
+            icon = 'fa-file-excel';
+            badgeClass = 'success';
+            statusText = 'Excel';
+        }
+        
+        if (isValid) {
+            validFiles++;
+        } else {
+            badgeClass = 'warning';
+            statusText = 'Invalid';
+        }
+        
+        listItem.innerHTML = `
+            <div>
+                <i class="fas ${icon} me-2"></i>
+                <span>${file.name}</span>
+                <small class="text-muted d-block">${(file.size / 1024 / 1024).toFixed(2)} MB</small>
+            </div>
+            <span class="badge bg-${badgeClass}">${statusText}</span>
+        `;
+        
+        fileList.appendChild(listItem);
+    });
+    
+    filePreview.style.display = 'block';
+    uploadBtn.disabled = validFiles === 0;
+    
+    if (validFiles > 0) {
+        uploadBtn.innerHTML = `<i class="fas fa-upload me-1"></i>Upload ${validFiles} File${validFiles > 1 ? 's' : ''}`;
+    }
 }
 
 // Enhanced STP modal with debug info
@@ -1063,6 +1224,836 @@ function inspectCurrentPageData() {
     });
 }
 
+// Add this function to your main.js file for debugging uploads
+
+function debugUpload() {
+    console.log('=== STARTING DEBUG UPLOAD ===');
+    
+    // Create a file input for testing
+    var debugInput = document.createElement('input');
+    debugInput.type = 'file';
+    debugInput.accept = '.pdf,.xlsx,.xls';
+    debugInput.multiple = true;
+    
+    debugInput.onchange = function() {
+        if (debugInput.files.length === 0) {
+            console.log('No files selected for debug');
+            return;
+        }
+        
+        console.log('Files selected for debug:', debugInput.files.length);
+        
+        // Create FormData
+        var formData = new FormData();
+        Array.from(debugInput.files).forEach(function(file) {
+            formData.append('files', file);
+            console.log('Added file to debug:', file.name, file.size, 'bytes');
+        });
+        
+        // Show progress
+        window.StatementsUI.showAlert('info', 'Running upload debug...');
+        
+        // Call debug endpoint
+        fetch('/api/statements/debug-upload', {
+            method: 'POST',
+            body: formData
+        })
+        .then(function(response) {
+            return response.json();
+        })
+        .then(function(data) {
+            console.log('=== DEBUG UPLOAD RESULTS ===');
+            console.log(data);
+            
+            if (data.success && data.debug_info) {
+                data.debug_info.forEach(function(fileDebug, index) {
+                    console.log(`\n--- FILE ${index + 1}: ${fileDebug.filename} ---`);
+                    
+                    console.log('Steps completed:');
+                    fileDebug.steps.forEach(function(step, stepIndex) {
+                        console.log(`  ${stepIndex + 1}. ${step}`);
+                    });
+                    
+                    if (fileDebug.errors.length > 0) {
+                        console.log('Errors encountered:');
+                        fileDebug.errors.forEach(function(error, errorIndex) {
+                            console.log(`  ERROR ${errorIndex + 1}: ${error}`);
+                        });
+                    }
+                    
+                    if (fileDebug.file_info) {
+                        console.log('File info:', fileDebug.file_info);
+                    }
+                    
+                    if (fileDebug.upload_response) {
+                        console.log('Upload response:', fileDebug.upload_response);
+                        
+                        if (fileDebug.upload_response.success) {
+                            console.log('✅ UPLOAD SUCCESSFUL');
+                            if (fileDebug.upload_details) {
+                                console.log('Upload details:', fileDebug.upload_details);
+                            }
+                        } else {
+                            console.log('❌ UPLOAD FAILED');
+                            console.log('Response text:', fileDebug.upload_response.response_text);
+                        }
+                    }
+                    
+                    if (fileDebug.sharepoint_access_test) {
+                        console.log('SharePoint access test:', fileDebug.sharepoint_access_test);
+                    }
+                    
+                    if (fileDebug.upload_url) {
+                        console.log('Upload URL used:', fileDebug.upload_url);
+                    }
+                });
+                
+                // Show summary alert
+                var totalFiles = data.debug_info.length;
+                var successfulUploads = data.debug_info.filter(f => 
+                    f.upload_response && f.upload_response.success
+                ).length;
+                var failedUploads = totalFiles - successfulUploads;
+                
+                if (successfulUploads > 0) {
+                    window.StatementsUI.showAlert('success', 
+                        `Debug complete: ${successfulUploads}/${totalFiles} uploads successful. Check console for details.`
+                    );
+                } else {
+                    window.StatementsUI.showAlert('danger', 
+                        `Debug complete: All uploads failed. Check console for error details.`
+                    );
+                }
+            } else {
+                console.log('Debug failed:', data.error);
+                window.StatementsUI.showAlert('danger', 'Debug failed: ' + data.error);
+            }
+        })
+        .catch(function(error) {
+            console.error('Debug upload error:', error);
+            window.StatementsUI.showAlert('danger', 'Debug error: ' + error.message);
+        });
+    };
+    
+    // Trigger file selection
+    debugInput.click();
+}
+
+// Also add this enhanced version to your API module
+window.StatementsAPI.uploadFiles = function(formData) {
+    return new Promise(function(resolve, reject) {
+        fetch('/api/statements/upload', {
+            method: 'POST',
+            body: formData
+        })
+        .then(function(response) {
+            if (response.status === 401 || response.status === 403) {
+                window.location.href = '/login';
+                return;
+            }
+            if (!response.ok) {
+                throw new Error('HTTP ' + response.status + ': ' + response.statusText);
+            }
+            return response.json();
+        })
+        .then(function(data) {
+            console.log('=== UPLOAD API RESPONSE ===');
+            console.log('Success:', data.success);
+            console.log('Total files:', data.total_files);
+            console.log('Successful uploads:', data.successful_uploads);
+            console.log('Failed uploads:', data.failed_uploads);
+            
+            if (data.results) {
+                console.log('Individual results:');
+                data.results.forEach(function(result, index) {
+                    console.log(`  ${index + 1}. ${result.filename}: ${result.success ? 'SUCCESS' : 'FAILED'}`);
+                    if (!result.success) {
+                        console.log(`     Error: ${result.error}`);
+                    } else {
+                        console.log(`     Account: ${result.account_name || result.account_type}`);
+                    }
+                });
+            }
+            
+            resolve(data);
+        })
+        .catch(function(error) {
+            console.error('Upload API error:', error);
+            reject(error);
+        });
+    });
+};
+
+// Add a button to easily run debug from console
+console.log('🔧 UPLOAD DEBUG READY');
+console.log('Run debugUpload() to test file upload with detailed logging');
+console.log('This will help identify exactly where the upload is failing');
+
+function refreshCalendarForUploadedFiles(uploadResults) {
+    if (!uploadResults || uploadResults.length === 0) {
+        return;
+    }
+    
+    // Get accounts that had successful uploads
+    var accountsToRefresh = new Set();
+    
+    uploadResults.forEach(function(result) {
+        if (result.success && result.account_name) {
+            var accountId = mapAccountNameToId(result.account_name);
+            if (accountId) {
+                accountsToRefresh.add(accountId);
+            }
+        }
+    });
+    
+    if (accountsToRefresh.size === 0) {
+        console.log('No accounts to refresh');
+        return;
+    }
+    
+    console.log('Refreshing calendar for accounts:', Array.from(accountsToRefresh));
+    
+    // Refresh each affected account
+    var refreshPromises = [];
+    
+    accountsToRefresh.forEach(function(accountId) {
+        var promise = refreshSingleAccountCalendar(accountId);
+        refreshPromises.push(promise);
+    });
+    
+    // Wait for all refreshes to complete
+    Promise.allSettled(refreshPromises).then(function(results) {
+        var successful = results.filter(r => r.status === 'fulfilled').length;
+        var failed = results.filter(r => r.status === 'rejected').length;
+        
+        if (successful > 0 && window.StatementsUI && window.StatementsUI.showAlert) {
+            window.StatementsUI.showAlert('success', 
+                `Calendar updated! ${successful} account${successful > 1 ? 's' : ''} refreshed.`
+            );
+        }
+        
+        if (failed > 0) {
+            console.warn(`${failed} account refreshes failed`);
+        }
+    });
+}
+
+function mapAccountNameToId(accountName) {
+    console.log('=== ACCOUNT NAME MAPPING DEBUG ===');
+    console.log('Trying to map account name:', JSON.stringify(accountName));
+    
+    var accountMappings = {
+        'STP SA': 'stp_sa',
+        'STP IP - PD': 'stp_ip_pd', 
+        'STP IP - PI': 'stp_ip_pi',
+        'BBVA MX MXN': 'bbva_mx_mxn',
+        'BBVA MX USD': 'bbva_mx_usd',
+        'BBVA SA MXN': 'bbva_sa_mxn',
+        'BBVA SA USD': 'bbva_sa_usd',
+        'BBVA IP Corp': 'bbva_ip_corp',
+        'BBVA IP Clientes': 'bbva_ip_clientes'
+    };
+    
+    var result = accountMappings[accountName] || null;
+    console.log('Mapping result:', result);
+    
+    if (!result) {
+        console.log('Available mappings:', Object.keys(accountMappings));
+    }
+    
+    return result;
+}
+
+function refreshSingleAccountCalendar(accountId) {
+    return new Promise(function(resolve, reject) {
+        // Check if StatementsAPI exists
+        if (!window.StatementsAPI || !window.StatementsAPI.loadAccount) {
+            console.warn('StatementsAPI not available, skipping refresh');
+            resolve(accountId);
+            return;
+        }
+        
+        console.log(`Refreshing calendar for ${accountId}...`);
+        
+        window.StatementsAPI.loadAccount(accountId)
+            .then(function(accountData) {
+                console.log(`Received fresh data for ${accountId}:`, accountData);
+                
+                // Update the UI with fresh data
+                if (window.StatementsUI && window.StatementsUI.updateAccountDisplay) {
+                    window.StatementsUI.updateAccountDisplay(accountId, accountData);
+                }
+                
+                // Update load button to show account is loaded
+                if (window.StatementsUI && window.StatementsUI.updateLoadButton) {
+                    window.StatementsUI.updateLoadButton(accountId, true);
+                }
+                
+                console.log(`Calendar updated for ${accountId}`);
+                resolve(accountId);
+            })
+            .catch(function(error) {
+                console.error(`Failed to refresh ${accountId}:`, error);
+                reject(error);
+            });
+    });
+}
+
+// Enhanced loadAccountData function with upload awareness
+function loadAccountData(accountId) {
+    var loadBtn = document.getElementById('load-btn-' + accountId);
+    
+    if (!loadBtn) {
+        console.error('Load button not found for account:', accountId);
+        return;
+    }
+    
+    // Show loading state
+    loadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    loadBtn.disabled = true;
+    
+    window.StatementsUI.showAlert('info', 'Loading account data...');
+    
+    window.StatementsAPI.loadAccount(accountId)
+        .then(function(accountData) {
+            console.log('Account data loaded:', accountData);
+            
+            // Update UI
+            window.StatementsUI.updateAccountDisplay(accountId, accountData);
+            
+            // Update load button
+            window.StatementsUI.updateLoadButton(accountId, true);
+            loadBtn.disabled = false;
+            
+            // Show parse button
+            var parseBtn = document.getElementById('parse-btn-' + accountId);
+            if (parseBtn) {
+                parseBtn.style.display = 'inline-block';
+            }
+            
+            // Show success message
+            var fileCount = accountData.total_files || 0;
+            var transactionCount = accountData.total_transactions || 0;
+            
+            window.StatementsUI.showAlert('success', 
+                `${accountId.toUpperCase()}: ${fileCount} files loaded, ${transactionCount.toLocaleString()} transactions`
+            );
+            
+            // Show success modal if significant data
+            if (fileCount > 0) {
+                showSuccessModal(accountId, accountData);
+            } else {
+                showNoAdditionalFilesModal(accountId);
+            }
+        })
+        .catch(function(error) {
+            console.error('Failed to load account data:', error);
+            
+            // Reset button
+            loadBtn.innerHTML = '<i class="fas fa-download"></i>';
+            loadBtn.disabled = false;
+            
+            window.StatementsUI.showAlert('danger', 
+                'Failed to load account data: ' + error.message
+            );
+        });
+}
+
+// Add automatic refresh on page load if there were recent uploads
+document.addEventListener('DOMContentLoaded', function() {
+    // Check if there were recent uploads (you could use sessionStorage for this)
+    var recentUploads = sessionStorage.getItem('recentUploads');
+    
+    if (recentUploads) {
+        try {
+            var uploadData = JSON.parse(recentUploads);
+            if (uploadData.timestamp && Date.now() - uploadData.timestamp < 60000) { // Within 1 minute
+                console.log('Detected recent uploads, refreshing affected accounts...');
+                refreshCalendarForUploadedFiles(uploadData.results);
+            }
+        } catch (e) {
+            console.warn('Could not parse recent upload data:', e);
+        }
+        
+        // Clear the flag
+        sessionStorage.removeItem('recentUploads');
+    }
+});
+
+function storeUploadResults(data) {
+    if (data.success && data.results) {
+        try {
+            sessionStorage.setItem('recentUploads', JSON.stringify({
+                results: data.results,
+                timestamp: Date.now()
+            }));
+        } catch (e) {
+            console.warn('Could not store upload results:', e);
+        }
+    }
+}
+
+// Updated parseAccountRow function - replace existing one
+function parseAccountRow(accountId) {
+    console.log('=== STARTING PARSE OPERATION ===');
+    console.log('Account ID:', accountId);
+    
+    // Get account name for display
+    var accountConfig = window.StatementsApp.accountIds.find(id => id === accountId);
+    var accountName = accountId.toUpperCase().replace('_', ' ');
+    
+    // Show parse modal
+    showParseModal(accountId, accountName);
+    
+    // Start parse operation
+    startParseOperation(accountId, accountName);
+}
+
+// Show parse progress modal (copy of upload modal pattern)
+function showParseModal(accountId, accountName) {
+    console.log('Creating parse modal with upload modal styling...');
+    
+    var modalHtml = `
+        <div class="modal fade" id="parseModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header bg-warning text-white">
+                        <h5 class="modal-title">
+                            <i class="fas fa-cog me-2"></i>
+                            Parse Account Statements
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="text-center mb-3">
+                            <h6 class="text-warning">${accountName}</h6>
+                            <p class="text-muted mb-0">Processing statement files and extracting transactions</p>
+                        </div>
+                        
+                        <!-- Parse Progress -->
+                        <div id="parseProgress" style="display: block;">
+                            <h6 class="text-warning mb-2">Parse Progress:</h6>
+                            <div class="progress mb-2">
+                                <div id="parseProgressBar" class="progress-bar bg-warning" role="progressbar" style="width: 0%"></div>
+                            </div>
+                            <small id="parseStatus" class="text-muted">Initializing parse operation...</small>
+                            
+                            <!-- File Progress Details -->
+                            <div id="parseDetails" class="mt-3" style="display: none;">
+                                <div class="row text-center">
+                                    <div class="col-4">
+                                        <div class="bg-light rounded p-2">
+                                            <div class="text-muted small">Files Processed</div>
+                                            <div id="filesProcessedCount" class="h6 mb-0 text-warning">0</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-4">
+                                        <div class="bg-light rounded p-2">
+                                            <div class="text-muted small">Total Files</div>
+                                            <div id="totalFilesCount" class="h6 mb-0 text-info">-</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-4">
+                                        <div class="bg-light rounded p-2">
+                                            <div class="text-muted small">Transactions</div>
+                                            <div id="transactionsCount" class="h6 mb-0 text-success">0</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Current File -->
+                                <div id="currentFileSection" class="mt-3" style="display: none;">
+                                    <div class="alert alert-info small mb-0">
+                                        <strong>Processing:</strong> <span id="currentFileName">-</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Parse Results -->
+                        <div id="parseResults" style="display: none;">
+                            <h6 class="text-warning mb-2">Parse Results:</h6>
+                            <div id="parseResultsList"></div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="parseCloseBtn">
+                            <i class="fas fa-times me-1"></i>Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if present
+    var existingModal = document.getElementById('parseModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Add modal to body
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // Show modal
+    var modal = new bootstrap.Modal(document.getElementById('parseModal'));
+    modal.show();
+    
+    // Clean up after modal is hidden
+    document.getElementById('parseModal').addEventListener('hidden.bs.modal', function() {
+        console.log('Parse modal closed, cleaning up...');
+        this.remove();
+    });
+    
+    console.log('Parse modal created and shown');
+}
+
+// Start parse operation and track progress
+function startParseOperation(accountId, accountName) {
+    console.log('=== STARTING PARSE API CALL ===');
+    
+    var parseStatus = document.getElementById('parseStatus');
+    var parseProgressBar = document.getElementById('parseProgressBar');
+    var parseCloseBtn = document.getElementById('parseCloseBtn');
+    
+    // Update initial status
+    if (parseStatus) {
+        parseStatus.textContent = 'Starting parse operation...';
+    }
+    
+    if (parseProgressBar) {
+        parseProgressBar.style.width = '10%';
+    }
+    
+    if (parseCloseBtn) {
+        parseCloseBtn.disabled = true;
+    }
+    
+    // Start parse via API
+    window.StatementsAPI.parseAccount(accountId)
+        .then(function(response) {
+            console.log('Parse started successfully:', response);
+            
+            if (parseStatus) {
+                parseStatus.textContent = 'Parse operation started, tracking progress...';
+            }
+            
+            if (parseProgressBar) {
+                parseProgressBar.style.width = '20%';
+            }
+            
+            // Start progress polling
+            startParseProgressPolling(response.session_id, accountId, accountName);
+        })
+        .catch(function(error) {
+            console.error('Failed to start parse:', error);
+            
+            if (parseStatus) {
+                parseStatus.textContent = 'Failed to start parse: ' + error.message;
+            }
+            
+            if (parseProgressBar) {
+                parseProgressBar.style.width = '100%';
+                parseProgressBar.className = 'progress-bar bg-danger';
+            }
+            
+            // Show error results
+            showParseResults({
+                success: false,
+                error: error.message,
+                account_id: accountId,
+                files_processed: 0,
+                transactions_added: 0
+            });
+            
+            if (parseCloseBtn) {
+                parseCloseBtn.disabled = false;
+                parseCloseBtn.innerHTML = '<i class="fas fa-times me-1"></i>Close';
+            }
+        });
+}
+
+// Poll parse progress (copy of upload progress pattern)
+function startParseProgressPolling(sessionId, accountId, accountName) {
+    console.log('Starting progress polling for session:', sessionId);
+    
+    var progressInterval = setInterval(function() {
+        window.StatementsAPI.getParseProgress(sessionId)
+            .then(function(progress) {
+                console.log('Progress update:', progress);
+                updateParseProgress(progress);
+                
+                // Check if completed
+                if (progress.status === 'completed' || progress.status === 'error') {
+                    clearInterval(progressInterval);
+                    handleParseCompletion(progress, accountId);
+                }
+            })
+            .catch(function(error) {
+                console.error('Progress polling error:', error);
+                clearInterval(progressInterval);
+                
+                var parseStatus = document.getElementById('parseStatus');
+                if (parseStatus) {
+                    parseStatus.textContent = 'Progress tracking failed: ' + error.message;
+                }
+            });
+    }, 2000); // Poll every 2 seconds
+}
+
+// Update parse progress display
+function updateParseProgress(progress) {
+    var parseStatus = document.getElementById('parseStatus');
+    var parseProgressBar = document.getElementById('parseProgressBar');
+    var parseDetails = document.getElementById('parseDetails');
+    var filesProcessedCount = document.getElementById('filesProcessedCount');
+    var totalFilesCount = document.getElementById('totalFilesCount');
+    var transactionsCount = document.getElementById('transactionsCount');
+    var currentFileSection = document.getElementById('currentFileSection');
+    var currentFileName = document.getElementById('currentFileName');
+    
+    // Update progress bar
+    if (parseProgressBar) {
+        parseProgressBar.style.width = (progress.progress_percentage || 0) + '%';
+        
+        // Color coding
+        if (progress.status === 'error') {
+            parseProgressBar.className = 'progress-bar bg-danger';
+        } else if (progress.progress_percentage >= 100) {
+            parseProgressBar.className = 'progress-bar bg-success';
+        } else {
+            parseProgressBar.className = 'progress-bar bg-warning';
+        }
+    }
+    
+    // Update status text
+    if (parseStatus) {
+        var statusText = progress.details || progress.status || 'Processing...';
+        parseStatus.textContent = statusText;
+    }
+    
+    // Show/update details section
+    if (parseDetails && (progress.total_files || progress.files_processed || progress.transactions_added)) {
+        parseDetails.style.display = 'block';
+        
+        if (filesProcessedCount) {
+            filesProcessedCount.textContent = progress.files_processed || 0;
+        }
+        
+        if (totalFilesCount && progress.total_files) {
+            totalFilesCount.textContent = progress.total_files;
+        }
+        
+        if (transactionsCount) {
+            transactionsCount.textContent = progress.transactions_added || 0;
+        }
+    }
+    
+    // Show current file being processed
+    if (currentFileSection && currentFileName && progress.current_file) {
+        currentFileSection.style.display = 'block';
+        currentFileName.textContent = progress.current_file;
+    } else if (currentFileSection && !progress.current_file) {
+        currentFileSection.style.display = 'none';
+    }
+}
+
+// Handle parse completion
+function handleParseCompletion(progress, accountId) {
+    console.log('Parse completed:', progress);
+    
+    var parseStatus = document.getElementById('parseStatus');
+    var parseCloseBtn = document.getElementById('parseCloseBtn');
+    
+    if (progress.status === 'completed') {
+        if (parseStatus) {
+            parseStatus.textContent = 'Parse completed successfully!';
+        }
+        
+        // Show results
+        showParseResults(progress.result || progress);
+        
+        // Refresh account display
+        refreshAccountAfterParse(accountId);
+        
+    } else if (progress.status === 'error') {
+        if (parseStatus) {
+            parseStatus.textContent = 'Parse failed: ' + (progress.error || 'Unknown error');
+        }
+        
+        // Show error results
+        showParseResults({
+            success: false,
+            error: progress.error || 'Parse operation failed',
+            account_id: accountId,
+            files_processed: progress.files_processed || 0,
+            transactions_added: progress.transactions_added || 0
+        });
+    }
+    
+    // Re-enable close button
+    if (parseCloseBtn) {
+        parseCloseBtn.disabled = false;
+        parseCloseBtn.innerHTML = '<i class="fas fa-check me-1"></i>Close';
+    }
+}
+
+// Show parse results (copy of upload results pattern)
+function showParseResults(result) {
+    var parseResults = document.getElementById('parseResults');
+    var parseResultsList = document.getElementById('parseResultsList');
+    
+    if (!parseResults || !parseResultsList) {
+        console.warn('Parse results elements not found');
+        return;
+    }
+    
+    var summaryHtml = `
+        <div class="alert alert-${result.success ? 'success' : 'danger'}" role="alert">
+            <h6 class="alert-heading">
+                <i class="fas fa-${result.success ? 'check-circle' : 'exclamation-triangle'} me-2"></i>
+                Parse ${result.success ? 'Completed' : 'Failed'}
+            </h6>
+            <p class="mb-0">
+                ${result.files_processed || 0} files processed successfully.
+                ${result.transactions_added || 0} transactions added to database.
+                ${result.files_skipped ? ` ${result.files_skipped} files were already up to date.` : ''}
+            </p>
+        </div>
+    `;
+    
+    // Add summary statistics
+    if (result.success) {
+        summaryHtml += `
+            <div class="row mt-2">
+                <div class="col-4">
+                    <div class="bg-light rounded p-2 text-center">
+                        <div class="text-muted small">Files Processed</div>
+                        <div class="h5 mb-0 text-warning">${result.files_processed || 0}</div>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="bg-light rounded p-2 text-center">
+                        <div class="text-muted small">Transactions Added</div>
+                        <div class="h5 mb-0 text-success">${result.transactions_added || 0}</div>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="bg-light rounded p-2 text-center">
+                        <div class="text-muted small">Total Transactions</div>
+                        <div class="h5 mb-0 text-info">${result.total_transactions || 0}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Add error details if any
+    if (result.errors && result.errors.length > 0) {
+        summaryHtml += '<div class="mt-2"><strong>Errors encountered:</strong><ul class="small">';
+        result.errors.forEach(function(error) {
+            summaryHtml += `<li class="text-danger">${error}</li>`;
+        });
+        summaryHtml += '</ul></div>';
+    }
+    
+    parseResultsList.innerHTML = summaryHtml;
+    parseResults.style.display = 'block';
+}
+
+// Add this to refreshAccountAfterParse function, right after the console.log line:
+function refreshAccountAfterParse(accountId) {
+    console.log('=== PARSE COMPLETION DEBUG ===');
+    console.log('About to refresh account:', accountId);
+
+    // Check current state of month cells BEFORE refresh
+    for (var month = 1; month <= 12; month++) {
+        var countElement = document.getElementById('count-' + accountId + '-' + month);
+        if (countElement && countElement.textContent !== '-') {
+            console.log(`Month ${month} count BEFORE refresh:`, countElement.textContent);
+        }
+    }
+    
+    console.log('=== PARSE COMPLETION - FORCING INVENTORY REFRESH ===');
+    
+    // Show initial message
+    if (window.StatementsUI && window.StatementsUI.showAlert) {
+        window.StatementsUI.showAlert('info', 'Parse completed! Refreshing inventory...');
+    }
+    
+    // FORCE inventory refresh to ensure new parse data is used
+    fetch('/api/statements/refresh-inventory/' + accountId, {
+        method: 'POST'
+    })
+    .then(function(response) {
+        return response.json();
+    })
+    .then(function(refreshResult) {
+        console.log('Inventory refresh initiated:', refreshResult);
+        
+        // Wait a moment for inventory to process, then load fresh data
+        setTimeout(function() {
+            window.StatementsAPI.loadAccount(accountId)
+                .then(function(accountData) {
+                    console.log('=== ACCOUNT DATA RECEIVED ===');
+                    console.log('Account data refreshed after parse:', accountData);
+                    
+                    // Check if the data itself has duplication
+                    if (accountData.months) {
+                        console.log('=== CHECKING MONTH DATA ===');
+                        for (var monthKey in accountData.months) {
+                            var monthData = accountData.months[monthKey];
+                            if (monthData.xlsx && monthData.pdf) {
+                                console.log(`Month ${monthKey}:`);
+                                console.log('  XLSX transactions:', monthData.xlsx.transaction_count);
+                                console.log('  PDF transactions:', monthData.pdf.transaction_count);
+                            }
+                        }
+                    }
+                    
+                    // Update UI display
+                    if (window.StatementsUI && window.StatementsUI.updateAccountDisplay) {
+                        window.StatementsUI.updateAccountDisplay(accountId, accountData);
+                    }
+                    
+                    // Check counts AFTER UI update
+                    setTimeout(function() {
+                        console.log('=== AFTER UI UPDATE ===');
+                        for (var month = 1; month <= 12; month++) {
+                            var countElement = document.getElementById('count-' + accountId + '-' + month);
+                            if (countElement && countElement.textContent !== '-') {
+                                console.log(`Month ${month} count AFTER refresh:`, countElement.textContent);
+                            }
+                        }
+                    }, 500);
+                    
+                    if (window.StatementsUI && window.StatementsUI.showAlert) {
+                        window.StatementsUI.showAlert('success', 'Account data refreshed successfully!');
+                    }
+                })
+                .catch(function(error) {
+                    console.error('Failed to refresh account after parse:', error);
+                    if (window.StatementsUI && window.StatementsUI.showAlert) {
+                        window.StatementsUI.showAlert('danger', 'Failed to refresh account data');
+                    }
+                });
+        }, 2000); // Wait 2 seconds for inventory refresh to complete
+    })
+    .catch(function(error) {
+        console.error('Failed to refresh inventory:', error);
+        if (window.StatementsUI && window.StatementsUI.showAlert) {
+            window.StatementsUI.showAlert('warning', 'Inventory refresh failed, loading cached data...');
+        }
+        
+        // Fallback: try to load without inventory refresh
+        window.StatementsAPI.loadAccount(accountId)
+            .then(function(accountData) {
+                window.StatementsUI.updateAccountDisplay(accountId, accountData);
+            });
+    });
+}
+
+
 // Initialize on DOM ready
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize app with template year
@@ -1086,7 +2077,7 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('Run testCell("accountId", monthNumber) to test specific cells');
     console.log('StatementsApp state:', window.StatementsApp);
     
-    console.log('Upload functionality ready!');
+    console.log('Upload functionality ready - FIXED VERSION!');
 });
 
 // Handle browser back/forward buttons

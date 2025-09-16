@@ -65,7 +65,14 @@
                             {% if month_data %}
                                 {% set pdf_count = month_data.get('pdf', {}).get('transaction_count', 0) if month_data.get('pdf') else 0 %}
                                 {% set xlsx_count = month_data.get('xlsx', {}).get('transaction_count', 0) if month_data.get('xlsx') else 0 %}
-                                {% set txn_count = pdf_count + xlsx_count %}
+                                
+                                {# FIXED: For STP accounts, only count XLSX to avoid duplication #}
+                                {% if account_data.type == 'stp' %}
+                                    {% set txn_count = xlsx_count %}
+                                {% else %}
+                                    {% set txn_count = pdf_count + xlsx_count %}
+                                {% endif %}
+                                
                                 {% if txn_count > 0 %}
                                     {% if txn_count < 1000 %}{{ txn_count }}
                                     {% elif txn_count < 1000000 %}{{ "%.1f"|format(txn_count/1000) }}k
