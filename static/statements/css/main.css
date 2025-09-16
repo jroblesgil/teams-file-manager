@@ -150,29 +150,33 @@
     vertical-align: middle;
 }
 
-/* === STP FILE SELECTION MODAL === */
-#stpFileSelectionModal .modal-content {
+/* === MODAL STYLING (STP + Upload) === */
+#stpFileSelectionModal .modal-content,
+#uploadModal .modal-content {
     border: none;
     border-radius: 12px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
 }
 
-#stpFileSelectionModal .modal-header {
+#stpFileSelectionModal .modal-header,
+#uploadModal .modal-header {
     border-radius: 12px 12px 0 0;
     border-bottom: none;
     padding: 20px 24px 16px;
 }
 
-#stpFileSelectionModal .modal-body {
+#stpFileSelectionModal .modal-body,
+#uploadModal .modal-body {
     padding: 20px 24px;
 }
 
-#stpFileSelectionModal .modal-footer {
+#stpFileSelectionModal .modal-footer,
+#uploadModal .modal-footer {
     border-top: 1px solid #e9ecef;
     padding: 16px 24px 20px;
 }
 
-/* File option buttons */
+/* File option buttons (used by both STP and Upload modals) */
 .file-option-btn {
     border: 2px solid transparent !important;
     border-radius: 8px !important;
@@ -180,6 +184,8 @@
     transition: all 0.3s ease !important;
     background: linear-gradient(white, white) padding-box,
                 linear-gradient(45deg, transparent, transparent) border-box !important;
+    cursor: pointer !important;
+    text-decoration: none !important;
 }
 
 .file-option-btn:hover {
@@ -205,6 +211,23 @@
     background: linear-gradient(135deg, #dc3545, #fd7e14) !important;
     color: white !important;
     border-color: #fd7e14 !important;
+}
+
+/* === UPLOAD-SPECIFIC ADDITIONS === */
+.file-option-btn.btn-outline-primary {
+    border: 2px solid #0d6efd !important;
+}
+
+.file-option-btn.btn-outline-primary:hover {
+    background: linear-gradient(135deg, #0d6efd, #6610f2) !important;
+    color: white !important;
+    border-color: #6610f2 !important;
+}
+
+/* File drop zone specific styling */
+#fileDropZone {
+    border-style: dashed !important;
+    min-height: 80px !important;
 }
 
 /* === ALERT IMPROVEMENTS === */
@@ -296,7 +319,8 @@
     }
     
     /* Modal responsive adjustments */
-    #stpFileSelectionModal .modal-dialog {
+    #stpFileSelectionModal .modal-dialog,
+    #uploadModal .modal-dialog {
         margin: 10px;
     }
     

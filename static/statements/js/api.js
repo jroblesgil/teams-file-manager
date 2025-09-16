@@ -1,4 +1,4 @@
-// API interaction functions
+// API interaction functions with upload implementation
 window.StatementsAPI = {
     // Load account data from server
     loadAccount: function(accountId) {
@@ -38,10 +38,117 @@ window.StatementsAPI = {
         console.log('Parse account:', accountId);
     },
     
-    // Upload files to Teams
-    uploadFiles: function(files) {
-        // TODO: Implement upload API call
-        console.log('Upload files:', files);
+    // UPLOAD FUNCTIONALITY - IMPLEMENTED
+    uploadFiles: function(formData) {
+        return new Promise(function(resolve, reject) {
+            console.log('=== API UPLOAD STARTED ===');
+            
+            if (!formData) {
+                reject(new Error('No form data provided'));
+                return;
+            }
+            
+            console.log('Uploading to /api/statements/upload...');
+            
+            fetch('/api/statements/upload', {
+                method: 'POST',
+                body: formData
+                // Don't set Content-Type header - let browser set it with boundary for multipart/form-data
+            })
+            .then(function(response) {
+                console.log('Upload response status:', response.status);
+                
+                // Handle authentication errors
+                if (response.status === 401 || response.status === 403) {
+                    window.location.href = '/login';
+                    return;
+                }
+                
+                if (!response.ok) {
+                    throw new Error('Upload failed with status ' + response.status + ': ' + response.statusText);
+                }
+                
+                return response.json();
+            })
+            .then(function(data) {
+                console.log('Upload response data:', data);
+                
+                if (data.success !== undefined) {
+                    // Valid response format
+                    resolve(data);
+                } else {
+                    // Unexpected response format
+                    reject(new Error('Invalid response format from server'));
+                }
+            })
+            .catch(function(error) {
+                console.error('Upload API error:', error);
+                reject(error);
+            });
+        });
+    },
+    
+    // Validate file format before upload
+    validateFileFormat: function(filename) {
+        return new Promise(function(resolve, reject) {
+            console.log('Validating file format for:', filename);
+            
+            fetch('/api/statements/upload/validate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    filename: filename
+                })
+            })
+            .then(function(response) {
+                if (response.status === 401 || response.status === 403) {
+                    window.location.href = '/login';
+                    return;
+                }
+                
+                if (!response.ok) {
+                    throw new Error('Validation failed with status ' + response.status);
+                }
+                
+                return response.json();
+            })
+            .then(function(data) {
+                console.log('Validation result:', data);
+                resolve(data);
+            })
+            .catch(function(error) {
+                console.error('Validation error:', error);
+                reject(error);
+            });
+        });
+    },
+    
+    // Get supported upload formats
+    getSupportedFormats: function() {
+        return new Promise(function(resolve, reject) {
+            fetch('/api/statements/upload/formats')
+            .then(function(response) {
+                if (response.status === 401 || response.status === 403) {
+                    window.location.href = '/login';
+                    return;
+                }
+                
+                if (!response.ok) {
+                    throw new Error('Failed to get formats with status ' + response.status);
+                }
+                
+                return response.json();
+            })
+            .then(function(data) {
+                resolve(data);
+            })
+            .catch(function(error) {
+                console.error('Get formats error:', error);
+                reject(error);
+            });
+        });
     },
     
     // Download file

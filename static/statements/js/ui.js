@@ -1,4 +1,5 @@
 // UI manipulation functions
+// UI manipulation functions with upload support
 window.StatementsUI = {
     // Update account display after loading data
     updateAccountDisplay: function(accountId, accountData) {
@@ -187,7 +188,16 @@ window.StatementsUI = {
     // Show alert message
     showAlert: function(type, message) {
         var alertElement = document.getElementById('statusAlert');
-        if (!alertElement) return;
+        if (!alertElement) {
+            // Create alert element if it doesn't exist
+            alertElement = document.createElement('div');
+            alertElement.id = 'statusAlert';
+            alertElement.className = 'alert position-fixed top-0 end-0 m-3';
+            alertElement.style.zIndex = '1050';
+            alertElement.style.minWidth = '300px';
+            alertElement.style.display = 'none';
+            document.body.appendChild(alertElement);
+        }
         
         alertElement.className = 'alert alert-' + type + ' position-fixed top-0 end-0 m-3';
         alertElement.innerHTML = message + '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
@@ -206,5 +216,280 @@ window.StatementsUI = {
         if (count < 1000) return count.toString();
         if (count < 1000000) return (count / 1000).toFixed(1) + 'k';
         return (count / 1000000).toFixed(1) + 'M';
+    },
+    
+    // === UPLOAD UI FUNCTIONS === //
+    
+    // Show upload progress in modal
+    showUploadProgress: function(percentage, status, currentFile) {
+        var uploadProgress = document.getElementById('uploadProgress');
+        var uploadProgressBar = document.getElementById('uploadProgressBar');
+        var uploadStatus = document.getElementById('uploadStatus');
+        
+        if (!uploadProgress || !uploadProgressBar || !uploadStatus) {
+            console.warn('Upload progress elements not found');
+            return;
+        }
+        
+        // Show progress section
+        uploadProgress.style.display = 'block';
+        
+        // Update progress bar
+        uploadProgressBar.style.width = percentage + '%';
+        
+        // Update status text
+        var statusText = status || 'Processing...';
+        if (currentFile) {
+            statusText += ' (' + currentFile + ')';
+        }
+        uploadStatus.textContent = statusText;
+        
+        // Color coding based on progress
+        if (percentage >= 100) {
+            uploadProgressBar.classList.add('bg-success');
+        } else if (percentage >= 50) {
+            uploadProgressBar.classList.add('bg-info');
+        }
+    },
+    
+    // Show upload results in modal
+    showUploadResults: function(results) {
+        var uploadResults = document.getElementById('uploadResults');
+        var uploadResultsList = document.getElementById('uploadResultsList');
+        
+        if (!uploadResults || !uploadResultsList) {
+            console.warn('Upload results elements not found');
+            return;
+        }
+        
+        var successCount = results.successful_uploads || 0;
+        var totalCount = results.total_files || 0;
+        var failedCount = results.failed_uploads || 0;
+        
+        var alertClass = results.success ? 'alert-success' : 'alert-danger';
+        var iconClass = results.success ? 'fa-check-circle' : 'fa-exclamation-triangle';
+        
+        var summaryHtml = `
+            <div class="alert ${alertClass}" role="alert">
+                <h6 class="alert-heading">
+                    <i class="fas ${iconClass} me-2"></i>
+                    Upload ${results.success ? 'Completed' : 'Failed'}
+                </h6>
+                <p class="mb-0">
+                    ${successCount} of ${totalCount} files uploaded successfully.
+                    ${failedCount > 0 ? ` ${failedCount} files failed.` : ''}
+                </p>
+            </div>
+        `;
+        
+        // Add individual file results
+        if (results.results && results.results.length > 0) {
+            summaryHtml += '<div class="mt-2">';
+            results.results.forEach(function(result) {
+                var itemClass = result.success ? 'upload-result-item success' : 'upload-result-item error';
+                var iconClass = result.success ? 'fa-check-circle text-success' : 'fa-times-circle text-danger';
+                var message = result.success ? 
+                    `Uploaded to ${result.account_name || result.account_type || 'account'}` : 
+                    `Failed: ${result.error || 'Unknown error'}`;
+                    
+                summaryHtml += `
+                    <div class="${itemClass}">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>${result.filename || 'Unknown file'}</strong>
+                                <small class="text-muted d-block">${message}</small>
+                            </div>
+                            <i class="fas ${iconClass}"></i>
+                        </div>
+                    </div>
+                `;
+            });
+            summaryHtml += '</div>';
+        }
+        
+        uploadResultsList.innerHTML = summaryHtml;
+        uploadResults.style.display = 'block';
+    },
+    
+    // Update upload button state
+    updateUploadButton: function(state, text, disabled) {
+        var uploadBtn = document.getElementById('uploadBtn');
+        if (!uploadBtn) return;
+        
+        uploadBtn.disabled = disabled || false;
+        
+        var iconClass = 'fa-upload';
+        if (state === 'uploading') {
+            iconClass = 'fa-spinner fa-spin';
+        } else if (state === 'success') {
+            iconClass = 'fa-check';
+        } else if (state === 'error') {
+            iconClass = 'fa-exclamation-triangle';
+        }
+        
+        uploadBtn.innerHTML = `<i class="fas ${iconClass} me-1"></i>${text || 'Upload Files'}`;
+    },
+    
+    // Show file preview in upload modal
+    showFilePreview: function(files) {
+        var selectedFilesSection = document.getElementById('selectedFilesSection');
+        var selectedFilesList = document.getElementById('selectedFilesList');
+        
+        if (!selectedFilesSection || !selectedFilesList) {
+            console.warn('File preview elements not found');
+            return;
+        }
+        
+        // Clear previous files
+        selectedFilesList.innerHTML = '';
+        
+        if (files.length === 0) {
+            selectedFilesSection.style.display = 'none';
+            return;
+        }
+        
+        // Process each file
+        Array.from(files).forEach(function(file, index) {
+            var fileItem = document.createElement('div');
+            fileItem.className = 'selected-file-item';
+            
+            // Validate file
+            var validation = window.StatementsUI.validateFile(file);
+            
+            if (validation.valid) {
+                fileItem.classList.add('valid');
+            } else {
+                fileItem.classList.add('invalid');
+            }
+            
+            // File icon
+            var iconClass = 'fa-file';
+            var iconColorClass = 'unknown';
+            
+            if (file.name.toLowerCase().endsWith('.pdf')) {
+                iconClass = 'fa-file-pdf';
+                iconColorClass = 'pdf';
+            } else if (file.name.toLowerCase().match(/\.(xlsx|xls)$/)) {
+                iconClass = 'fa-file-excel';
+                iconColorClass = 'excel';
+            }
+            
+            fileItem.innerHTML = `
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center">
+                        <i class="fas ${iconClass} upload-file-icon ${iconColorClass}"></i>
+                        <div>
+                            <div class="fw-bold">${file.name}</div>
+                            <small class="text-muted">${(file.size / 1024 / 1024).toFixed(2)} MB</small>
+                            ${!validation.valid ? `<br><small class="text-danger">${validation.error}</small>` : ''}
+                            ${validation.valid && validation.info ? `<br><small class="text-info">${validation.info}</small>` : ''}
+                        </div>
+                    </div>
+                    <span class="badge ${validation.valid ? 'bg-success' : 'bg-danger'}">
+                        ${validation.valid ? '✓ Valid' : '✗ Invalid'}
+                    </span>
+                </div>
+            `;
+            
+            selectedFilesList.appendChild(fileItem);
+        });
+        
+        // Show selected files section
+        selectedFilesSection.style.display = 'block';
+    },
+    
+    // Validate upload file
+    validateFile: function(file) {
+        // Check file extension
+        var fileName = file.name.toLowerCase();
+        var validExtensions = ['.pdf', '.xlsx', '.xls'];
+        var hasValidExtension = validExtensions.some(ext => fileName.endsWith(ext));
+        
+        if (!hasValidExtension) {
+            return {
+                valid: false,
+                error: 'Invalid file type. Use PDF, XLSX, or XLS files.'
+            };
+        }
+        
+        // Check file size (50MB limit)
+        var maxSize = 50 * 1024 * 1024; // 50MB
+        if (file.size > maxSize) {
+            return {
+                valid: false,
+                error: 'File too large. Maximum size is 50MB.'
+            };
+        }
+        
+        // Check STP pattern
+        var stpPattern = /^ec-(\d{18})-(\d{4})(\d{2})\.(pdf|xlsx|xls)$/;
+        var stpMatch = fileName.match(stpPattern);
+        
+        if (stpMatch) {
+            return {
+                valid: true,
+                info: `STP file: ${stpMatch[1]} - ${stpMatch[2]}/${stpMatch[3]}`
+            };
+        }
+        
+        // Check BBVA pattern
+        var bbvaPattern = /^(\d{4})\s+(.+?)\.(pdf)$/;
+        var bbvaMatch = fileName.match(bbvaPattern);
+        
+        if (bbvaMatch) {
+            return {
+                valid: true,
+                info: `BBVA file: ${bbvaMatch[1]} - ${bbvaMatch[2]}`
+            };
+        }
+        
+        // PDF files are valid for auto-detection
+        if (fileName.endsWith('.pdf')) {
+            return {
+                valid: true,
+                info: 'PDF file - will auto-detect account'
+            };
+        }
+        
+        return {
+            valid: false,
+            error: 'Filename doesn\'t match expected patterns'
+        };
+    },
+    
+    // Clear upload modal
+    clearUploadModal: function() {
+        var selectedFilesSection = document.getElementById('selectedFilesSection');
+        var uploadProgress = document.getElementById('uploadProgress');
+        var uploadResults = document.getElementById('uploadResults');
+        var fileInput = document.getElementById('fileInput');
+        
+        if (selectedFilesSection) selectedFilesSection.style.display = 'none';
+        if (uploadProgress) uploadProgress.style.display = 'none';
+        if (uploadResults) uploadResults.style.display = 'none';
+        if (fileInput) fileInput.value = '';
+        
+        this.updateUploadButton('default', 'Upload Files', true);
+    },
+    
+    // Handle drag and drop visual feedback
+    handleDragFeedback: function(element, state) {
+        if (!element) return;
+        
+        switch (state) {
+            case 'enter':
+                element.classList.add('drag-over');
+                element.classList.remove('btn-outline-primary');
+                element.classList.add('btn-outline-success');
+                break;
+            case 'leave':
+                element.classList.remove('drag-over', 'btn-outline-success');
+                element.classList.add('btn-outline-primary');
+                break;
+            case 'drop':
+                element.classList.remove('drag-over', 'btn-outline-success');
+                element.classList.add('btn-outline-primary');
+                break;
+        }
     }
 };
