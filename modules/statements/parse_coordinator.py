@@ -245,20 +245,10 @@ class UnifiedParseCoordinator:
             })
         
         return result
-    
+
     def _parse_bbva_account(self, account_id: str, account_config: Dict[str, Any], 
-                           access_token: str, progress_callback: Optional[Callable]) -> Dict[str, Any]:
-        """Parse BBVA account using existing BBVA modules"""
-        
-        # Import existing BBVA modules  
-        from modules.bbva.bbva_files import get_bbva_files
-        from modules.bbva.bbva_database import (
-            get_bbva_database, update_bbva_database,
-            get_bbva_parse_tracking_data, update_bbva_parse_tracking_data
-        )
-        from modules.bbva.bbva_batch import (
-            check_bbva_file_parsing_status, process_bbva_account
-        )
+                        access_token: str, progress_callback: Optional[Callable]) -> Dict[str, Any]:
+        """Parse BBVA account using existing BBVA modules - FIXED VERSION"""
         
         clabe = account_config['identifier']
         
@@ -269,23 +259,26 @@ class UnifiedParseCoordinator:
                 'details': 'Starting BBVA parse process...'
             })
         
-        # Create a wrapper progress callback for the existing BBVA system
-        def bbva_progress_wrapper(progress_data):
-            if progress_callback:
-                # Map BBVA progress data to our standard format
-                mapped_progress = {
-                    'status': progress_data.get('status', 'processing'),
-                    'progress_percentage': progress_data.get('progress_percentage', 50),
-                    'current_file': progress_data.get('current_file'),
-                    'files_processed': progress_data.get('files_processed', 0),
-                    'total_files': progress_data.get('total_files', 0),
-                    'transactions_added': progress_data.get('transactions_added', 0),
-                    'details': progress_data.get('details', 'Processing BBVA account...')
-                }
-                progress_callback(mapped_progress)
-        
         try:
-            # Use existing BBVA batch processor
+            # Import the BBVA batch processor - THIS IS THE KEY FIX
+            from modules.bbva.bbva_batch import process_bbva_account
+            
+            # Create a wrapper progress callback for the existing BBVA system
+            def bbva_progress_wrapper(progress_data):
+                if progress_callback:
+                    # Map BBVA progress data to our standard format
+                    mapped_progress = {
+                        'status': progress_data.get('status', 'processing'),
+                        'progress_percentage': progress_data.get('progress_percentage', 50),
+                        'current_file': progress_data.get('current_file'),
+                        'files_processed': progress_data.get('files_processed', 0),
+                        'total_files': progress_data.get('total_files', 0),
+                        'transactions_added': progress_data.get('transactions_added', 0),
+                        'details': progress_data.get('details', 'Processing BBVA account...')
+                    }
+                    progress_callback(mapped_progress)
+            
+            # Use the existing BBVA batch processor (which has proper parse tracking)
             result = process_bbva_account(clabe, access_token, bbva_progress_wrapper)
             
             # Add our account info to result
@@ -294,13 +287,46 @@ class UnifiedParseCoordinator:
             
             return result
             
-        except Exception as e:
-            # Handle case where process_bbva_account doesn't exist yet
-            self.logger.warning(f"BBVA batch processor not available, using basic approach: {e}")
+        except ImportError as e:
+            # If bbva_batch is not available, provide a clear error
+            self.logger.error(f"BBVA batch processor not available: {e}")
             
-            # Fallback: basic BBVA processing
-            return self._parse_bbva_account_basic(account_id, account_config, access_token, progress_callback)
-    
+            if progress_callback:
+                progress_callback({
+                    'status': 'error',
+                    'progress_percentage': 0,
+                    'details': 'BBVA batch processor not available',
+                    'error': 'Required BBVA parsing modules are missing'
+                })
+            
+            return {
+                'success': False,
+                'error': 'BBVA batch processor not available - required modules missing',
+                'files_processed': 0,
+                'transactions_added': 0,
+                'account_id': account_id,
+                'account_type': 'bbva'
+            }
+            
+        except Exception as e:
+            self.logger.error(f"BBVA parsing failed: {e}")
+            
+            if progress_callback:
+                progress_callback({
+                    'status': 'error',
+                    'progress_percentage': 0,
+                    'details': f'BBVA parsing failed: {str(e)}'
+                })
+            
+            return {
+                'success': False,
+                'error': f'BBVA parsing failed: {str(e)}',
+                'files_processed': 0,
+                'transactions_added': 0,
+                'account_id': account_id,
+                'account_type': 'bbva'
+            }
+
     def _parse_bbva_account_basic(self, account_id: str, account_config: Dict[str, Any], 
                                  access_token: str, progress_callback: Optional[Callable]) -> Dict[str, Any]:
         """Basic BBVA parsing when advanced batch processor is not available"""

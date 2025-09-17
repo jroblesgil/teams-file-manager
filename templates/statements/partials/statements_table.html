@@ -32,7 +32,7 @@
                 {% set month_key = year|string ~ '-' ~ '%02d'|format(month) %}
                 {% set months_dict = account_data.get('months', {}) %}
                 {% set month_data = months_dict.get(month_key, {}) if months_dict else {} %}
-                {% set has_files = month_data and month_data.get('has_files') %}
+                {% set has_files = month_data and (month_data.get('xlsx') or month_data.get('pdf')) %}
                 
                 <td class="month-cell {{ 'no-file' if not has_files else '' }}"
                     data-account-id="{{ account_id }}" 
@@ -58,13 +58,13 @@
                     
                     <!-- Database Status -->
                     <div class="database-line">
-                        <span class="database-icon db-{{ 'parsed' if (month_data and month_data.get('status') == 'complete' and month_data.get('pdf', {}).get('transaction_count', 0) > 0) else ('loaded' if has_files else 'not-loaded') }}" id="db-icon-{{ account_id }}-{{ month }}">
+                        <span class="database-icon db-{{ 'parsed' if (month_data and (((month_data.get('pdf') or {}).get('parse_status') == 'parsed') or ((month_data.get('xlsx') or {}).get('parse_status') == 'parsed'))) else ('loaded' if has_files else 'not-loaded') }}" id="db-icon-{{ account_id }}-{{ month }}">
                             <i class="fas fa-database"></i>
                         </span>
                         <span class="transaction-count" id="count-{{ account_id }}-{{ month }}">
                             {% if month_data %}
-                                {% set pdf_count = month_data.get('pdf', {}).get('transaction_count', 0) if month_data.get('pdf') else 0 %}
-                                {% set xlsx_count = month_data.get('xlsx', {}).get('transaction_count', 0) if month_data.get('xlsx') else 0 %}
+                                {% set pdf_count = (month_data.get('pdf') or {}).get('transaction_count', 0) %}
+                                {% set xlsx_count = (month_data.get('xlsx') or {}).get('transaction_count', 0) %}
                                 
                                 {# FIXED: For STP accounts, only count XLSX to avoid duplication #}
                                 {% if account_data.type == 'stp' %}

@@ -1858,9 +1858,22 @@ function updateParseProgress(progress) {
     }
 }
 
-// Handle parse completion
 function handleParseCompletion(progress, accountId) {
-    console.log('Parse completed:', progress);
+    console.log('=== PARSE COMPLETION DATA DEBUG ===');
+    console.log('Full progress object:', progress);
+    console.log('progress.result:', progress.result);
+    console.log('progress.status:', progress.status);
+    console.log('Type of progress:', typeof progress);
+    console.log('Progress keys:', Object.keys(progress));
+    
+    if (progress.result) {
+        console.log('Result object exists:');
+        console.log('  result.success:', progress.result.success);
+        console.log('  result.files_processed:', progress.result.files_processed);
+        console.log('  result.files_skipped:', progress.result.files_skipped);
+        console.log('  result.message:', progress.result.message);
+    }
+    console.log('=== END DEBUG ===');
     
     var parseStatus = document.getElementById('parseStatus');
     var parseCloseBtn = document.getElementById('parseCloseBtn');
@@ -1870,8 +1883,25 @@ function handleParseCompletion(progress, accountId) {
             parseStatus.textContent = 'Parse completed successfully!';
         }
         
+        // FIX: Transform progress object into the format showParseResults expects
+        var resultData = {
+            success: true,  // CRITICAL: Parse completion means success
+            files_processed: progress.files_processed || 0,
+            files_skipped: progress.files_skipped || 0,
+            transactions_added: progress.transactions_added || 0,
+            total_files: progress.total_files || 0,
+            message: progress.details || 'Parse completed successfully',
+            errors: progress.errors || []
+        };
+        
+        console.log('=== TRANSFORMED RESULT DATA ===');
+        console.log('Passing to showParseResults:', resultData);
+        console.log('Success field set to:', resultData.success);
+        console.log('Files processed:', resultData.files_processed);
+        console.log('Files skipped:', resultData.files_skipped);
+        
         // Show results
-        showParseResults(progress.result || progress);
+        showParseResults(resultData);
         
         // Refresh account display
         refreshAccountAfterParse(accountId);
@@ -1898,7 +1928,7 @@ function handleParseCompletion(progress, accountId) {
     }
 }
 
-// Show parse results (copy of upload results pattern)
+// Show parse results (FIXED VERSION)
 function showParseResults(result) {
     var parseResults = document.getElementById('parseResults');
     var parseResultsList = document.getElementById('parseResultsList');
@@ -1908,44 +1938,78 @@ function showParseResults(result) {
         return;
     }
     
+    // FIXED: Handle "all files current" case properly
+    var isSuccess = result.success;
+    var filesProcessed = result.files_processed || 0;
+    var filesSkipped = result.files_skipped || 0;
+    var transactionsAdded = result.transactions_added || 0;
+    var totalFiles = result.total_files || filesProcessed + filesSkipped;
+    
+    // Determine appropriate message based on results
+    var messageText = '';
+    var isAllCurrent = isSuccess && filesProcessed === 0 && filesSkipped > 0;
+    
+    if (isAllCurrent) {
+        // All files are already current - this is a SUCCESS case
+        messageText = `All ${filesSkipped} files are already up to date. No parsing needed.`;
+    } else if (isSuccess && filesProcessed > 0) {
+        // Some files were processed
+        messageText = `${filesProcessed} files processed successfully. ${transactionsAdded} transactions added to database.`;
+        if (filesSkipped > 0) {
+            messageText += ` ${filesSkipped} files were already current.`;
+        }
+    } else if (!isSuccess) {
+        // Actual failure
+        messageText = `Parse failed. ${filesProcessed} files processed. ${transactionsAdded} transactions added.`;
+    } else {
+        // Fallback
+        messageText = `${filesProcessed} files processed successfully. ${transactionsAdded} transactions added to database.`;
+    }
+    
     var summaryHtml = `
-        <div class="alert alert-${result.success ? 'success' : 'danger'}" role="alert">
+        <div class="alert alert-${isSuccess ? 'success' : 'danger'}" role="alert">
             <h6 class="alert-heading">
-                <i class="fas fa-${result.success ? 'check-circle' : 'exclamation-triangle'} me-2"></i>
-                Parse ${result.success ? 'Completed' : 'Failed'}
+                <i class="fas fa-${isSuccess ? 'check-circle' : 'exclamation-triangle'} me-2"></i>
+                Parse ${isSuccess ? 'Completed' : 'Failed'}
             </h6>
-            <p class="mb-0">
-                ${result.files_processed || 0} files processed successfully.
-                ${result.transactions_added || 0} transactions added to database.
-                ${result.files_skipped ? ` ${result.files_skipped} files were already up to date.` : ''}
-            </p>
+            <p class="mb-0">${messageText}</p>
         </div>
     `;
     
-    // Add summary statistics
-    if (result.success) {
+    // Add summary statistics if successful
+    if (isSuccess) {
         summaryHtml += `
             <div class="row mt-2">
                 <div class="col-4">
                     <div class="bg-light rounded p-2 text-center">
-                        <div class="text-muted small">Files Processed</div>
-                        <div class="h5 mb-0 text-warning">${result.files_processed || 0}</div>
+                        <div class="text-muted small">Files Checked</div>
+                        <div class="h5 mb-0 text-info">${totalFiles}</div>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="bg-light rounded p-2 text-center">
+                        <div class="text-muted small">${isAllCurrent ? 'Already Current' : 'Processed'}</div>
+                        <div class="h5 mb-0 text-${isAllCurrent ? 'success' : 'warning'}">${isAllCurrent ? filesSkipped : filesProcessed}</div>
                     </div>
                 </div>
                 <div class="col-4">
                     <div class="bg-light rounded p-2 text-center">
                         <div class="text-muted small">Transactions Added</div>
-                        <div class="h5 mb-0 text-success">${result.transactions_added || 0}</div>
-                    </div>
-                </div>
-                <div class="col-4">
-                    <div class="bg-light rounded p-2 text-center">
-                        <div class="text-muted small">Total Transactions</div>
-                        <div class="h5 mb-0 text-info">${result.total_transactions || 0}</div>
+                        <div class="h5 mb-0 text-success">${transactionsAdded}</div>
                     </div>
                 </div>
             </div>
         `;
+        
+        // Add helpful message for all-current case
+        if (isAllCurrent) {
+            summaryHtml += `
+                <div class="mt-2 alert alert-info small">
+                    <i class="fas fa-info-circle me-1"></i>
+                    All files have been parsed previously and are up to date. This is the expected result for accounts that have already been processed.
+                </div>
+            `;
+        }
     }
     
     // Add error details if any
