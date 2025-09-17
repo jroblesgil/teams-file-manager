@@ -291,23 +291,77 @@ DELETE /api/statements/cache/{account_id}
 
 ### File Structure
 ```
-/
-├── frontend/
-│   ├── templates/
-│   │   └── statements_table.html
-│   ├── static/
-│   │   ├── js/
-│   │   │   ├── main.js
-│   │   │   ├── api.js
-│   │   │   └── ui.js
-│   │   └── css/
-│   └── uploads/
-├── backend/
-│   ├── api/
-│   ├── parsers/
-│   ├── database/
-│   └── integrations/
-└── docs/
+teams-file-manager/
+├── statements_app.py             # Main Flask application (Phase 1.1 - Server-side)
+├── app.py                        # Legacy Flask app
+├── config.py                     # Configuration settings
+├── simple_test_api.py            # API testing utilities
+├── test_api_layer.py             # API layer tests
+├── test_backend_foundation.py    # Backend foundation tests
+├── .env                          # Environment variables (not in repo)
+├── requirements.txt              # Python dependencies
+├── README.md                     # Project documentation
+├── modules/                      # Core business logic modules
+│   ├── __init__.py
+│   ├── analysis.py               # Data analysis utilities
+│   ├── auth_temp.py              # Temporary auth helpers
+│   ├── shared/                   # Shared components
+│   │   ├── __init__.py
+│   │   └── azure_oauth.py        # Azure OAuth authentication
+│   ├── statements/               # Unified statements system
+│   │   ├── __init__.py
+│   │   ├── config.py             # Account configurations (UNIFIED_ACCOUNTS)
+│   │   ├── data_loader.py        # UnifiedDataLoader class
+│   │   ├── inventory_manager.py  # Inventory file management
+│   │   └── routes.py             # API routes registration
+│   ├── stp/                      # STP account handlers
+│   │   ├── __init__.py
+│   │   ├── stp_files.py         # STP file operations
+│   │   └── stp_parser.py        # STP statement parsing
+│   └── bbva/                     # BBVA account handlers
+│       ├── __init__.py
+│       ├── bbva_files.py        # BBVA file operations
+│       ├── bbva_parser.py       # BBVA statement parsing
+│       └── bbva_batch.py        # Batch processing
+├── components/                   # Reusable application components
+│   ├── __init__.py
+│   ├── auth.py                   # Authentication helpers
+│   ├── cache.py                  # Caching mechanisms
+│   ├── config_helpers.py         # Configuration utilities
+│   ├── database.py               # Database operations
+│   ├── file_operations.py        # File handling utilities
+│   ├── parsers.py               # Statement parsers
+│   ├── progress_tracking.py      # Progress tracking for long operations
+│   └── upload.py                # File upload handlers
+├── templates/                    # Jinja2 templates
+│   ├── base.html                # Base template
+│   ├── error.html               # Error pages
+│   ├── index.html               # Main index
+│   ├── login.html               # Login page
+│   ├── search.html              # Search interface
+│   ├── shared/                  # Shared template components
+│   ├── statements/              # Statements application templates
+│   │   ├── main.html           # Main statements view (server-rendered)
+│   │   ├── refresh_progress.html # Refresh progress page
+│   │   ├── error.html          # Statements error page
+│   │   └── partials/           # Template partials
+│   │       ├── navbar.html     # Navigation bar
+│   │       ├── control_bar.html # Control buttons/year selector
+│   │       └── statements_table.html # Main data table with icons
+│   ├── stp/                     # STP-specific templates
+│   ├── bbva/                    # BBVA-specific templates
+│   └── [other module templates]
+└── static/                      # Static assets
+    ├── css/                     # Global stylesheets
+    ├── js/                      # Global JavaScript
+    └── statements/              # Statements-specific assets
+        ├── css/
+        │   └── main.css         # Statements styling
+        └── js/
+            ├── config.js        # Configuration and constants
+            ├── api.js           # API interaction functions
+            ├── ui.js            # UI manipulation functions
+            └── main.js          # Main application logic
 ```
 
 ### Adding New Account Types
