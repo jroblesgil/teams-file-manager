@@ -1,6 +1,10 @@
-// API interaction functions with upload implementation
+// API interaction functions - Production Version
 window.StatementsAPI = {
-    // Load account data from server
+    /**
+     * Load account data from server
+     * @param {string} accountId - Account identifier
+     * @returns {Promise} Promise resolving to account data
+     */
     loadAccount: function(accountId) {
         return new Promise(function(resolve, reject) {
             var apiUrl = '/api/statements/load-account-data/' + accountId + '?year=' + window.StatementsApp.currentYear;
@@ -32,12 +36,13 @@ window.StatementsAPI = {
         });
     },
     
+    /**
+     * Start parse operation for account
+     * @param {string} accountId - Account identifier
+     * @returns {Promise} Promise resolving to session information
+     */
     parseAccount: function(accountId) {
         return new Promise(function(resolve, reject) {
-            console.log('=== STARTING PARSE API CALL ===');
-            console.log('Account ID:', accountId);
-            
-            // Make POST request to parse endpoint
             fetch('/api/statements/parse/' + accountId, {
                 method: 'POST',
                 headers: {
@@ -45,9 +50,6 @@ window.StatementsAPI = {
                 }
             })
             .then(function(response) {
-                console.log('Parse API response status:', response.status);
-                
-                // Handle authentication errors
                 if (response.status === 401 || response.status === 403) {
                     window.location.href = '/login';
                     return;
@@ -60,10 +62,7 @@ window.StatementsAPI = {
                 return response.json();
             })
             .then(function(data) {
-                console.log('Parse API response data:', data);
-                
                 if (data.success && data.session_id) {
-                    // Return session ID for progress tracking
                     resolve({
                         success: true,
                         session_id: data.session_id,
@@ -73,14 +72,15 @@ window.StatementsAPI = {
                     throw new Error(data.error || 'Failed to start parse operation');
                 }
             })
-            .catch(function(error) {
-                console.error('Parse API error:', error);
-                reject(error);
-            });
+            .catch(reject);
         });
     },
 
-    // Get parse progress using session ID
+    /**
+     * Get parse progress using session ID
+     * @param {string} sessionId - Parse session identifier
+     * @returns {Promise} Promise resolving to progress data
+     */
     getParseProgress: function(sessionId) {
         return new Promise(function(resolve, reject) {
             fetch('/api/statements/parse-progress/' + sessionId)
@@ -103,34 +103,27 @@ window.StatementsAPI = {
                     throw new Error(data.error || 'Failed to get parse progress');
                 }
             })
-            .catch(function(error) {
-                console.error('Progress API error:', error);
-                reject(error);
-            });
+            .catch(reject);
         });
     },    
 
-    // UPLOAD FUNCTIONALITY - IMPLEMENTED
+    /**
+     * Upload files to server
+     * @param {FormData} formData - Form data containing files
+     * @returns {Promise} Promise resolving to upload results
+     */
     uploadFiles: function(formData) {
         return new Promise(function(resolve, reject) {
-            console.log('=== API UPLOAD STARTED ===');
-            
             if (!formData) {
                 reject(new Error('No form data provided'));
                 return;
             }
             
-            console.log('Uploading to /api/statements/upload...');
-            
             fetch('/api/statements/upload', {
                 method: 'POST',
                 body: formData
-                // Don't set Content-Type header - let browser set it with boundary for multipart/form-data
             })
             .then(function(response) {
-                console.log('Upload response status:', response.status);
-                
-                // Handle authentication errors
                 if (response.status === 401 || response.status === 403) {
                     window.location.href = '/login';
                     return;
@@ -143,28 +136,23 @@ window.StatementsAPI = {
                 return response.json();
             })
             .then(function(data) {
-                console.log('Upload response data:', data);
-                
                 if (data.success !== undefined) {
-                    // Valid response format
                     resolve(data);
                 } else {
-                    // Unexpected response format
                     reject(new Error('Invalid response format from server'));
                 }
             })
-            .catch(function(error) {
-                console.error('Upload API error:', error);
-                reject(error);
-            });
+            .catch(reject);
         });
     },
     
-    // Validate file format before upload
+    /**
+     * Validate file format before upload
+     * @param {string} filename - Filename to validate
+     * @returns {Promise} Promise resolving to validation result
+     */
     validateFileFormat: function(filename) {
         return new Promise(function(resolve, reject) {
-            console.log('Validating file format for:', filename);
-            
             fetch('/api/statements/upload/validate', {
                 method: 'POST',
                 headers: {
@@ -187,17 +175,16 @@ window.StatementsAPI = {
                 return response.json();
             })
             .then(function(data) {
-                console.log('Validation result:', data);
                 resolve(data);
             })
-            .catch(function(error) {
-                console.error('Validation error:', error);
-                reject(error);
-            });
+            .catch(reject);
         });
     },
     
-    // Get supported upload formats
+    /**
+     * Get supported upload formats
+     * @returns {Promise} Promise resolving to supported formats
+     */
     getSupportedFormats: function() {
         return new Promise(function(resolve, reject) {
             fetch('/api/statements/upload/formats')
@@ -216,14 +203,18 @@ window.StatementsAPI = {
             .then(function(data) {
                 resolve(data);
             })
-            .catch(function(error) {
-                console.error('Get formats error:', error);
-                reject(error);
-            });
+            .catch(reject);
         });
     },
     
-    // Download file
+    /**
+     * Download file from server
+     * @param {string} accountId - Account identifier
+     * @param {number} month - Month number
+     * @param {string} fileType - File type (pdf/xlsx)
+     * @param {number} year - Year
+     * @returns {Promise} Promise resolving when download starts
+     */
     downloadFile: function(accountId, month, fileType, year) {
         return new Promise(function(resolve, reject) {
             var downloadUrl = '/api/statements/download-file/' + accountId + '/' + month + '/' + fileType + '?year=' + year;
@@ -240,7 +231,6 @@ window.StatementsAPI = {
                     return response.blob();
                 })
                 .then(function(blob) {
-                    // Create download link
                     var url = window.URL.createObjectURL(blob);
                     var link = document.createElement('a');
                     link.href = url;
@@ -252,6 +242,123 @@ window.StatementsAPI = {
                     resolve();
                 })
                 .catch(reject);
+        });
+    },
+
+    /**
+     * Get UI data for specific year
+     * @param {number} year - Year to load data for
+     * @returns {Promise} Promise resolving to UI data
+     */
+    getUIData: function(year) {
+        return new Promise(function(resolve, reject) {
+            fetch('/api/statements/ui-data/' + year)
+            .then(function(response) {
+                if (response.status === 401 || response.status === 403) {
+                    window.location.href = '/login';
+                    return;
+                }
+                
+                if (!response.ok) {
+                    throw new Error('Failed to load UI data: HTTP ' + response.status);
+                }
+                
+                return response.json();
+            })
+            .then(function(data) {
+                if (data.success) {
+                    resolve(data);
+                } else {
+                    reject(new Error(data.error || 'Failed to load UI data'));
+                }
+            })
+            .catch(reject);
+        });
+    },
+
+    /**
+     * Refresh inventory for specific account
+     * @param {string} accountId - Account identifier
+     * @returns {Promise} Promise resolving to refresh result
+     */
+    refreshInventory: function(accountId) {
+        return new Promise(function(resolve, reject) {
+            fetch('/api/statements/refresh-inventory/' + accountId, {
+                method: 'POST'
+            })
+            .then(function(response) {
+                if (response.status === 401 || response.status === 403) {
+                    window.location.href = '/login';
+                    return;
+                }
+                
+                if (!response.ok) {
+                    throw new Error('Failed to refresh inventory: HTTP ' + response.status);
+                }
+                
+                return response.json();
+            })
+            .then(function(data) {
+                if (data.success) {
+                    resolve(data);
+                } else {
+                    reject(new Error(data.error || 'Failed to refresh inventory'));
+                }
+            })
+            .catch(reject);
+        });
+    },
+
+    /**
+     * Refresh all account inventories
+     * @returns {Promise} Promise resolving to refresh result
+     */
+    refreshAllInventories: function() {
+        return new Promise(function(resolve, reject) {
+            fetch('/api/statements/refresh-all-inventories', {
+                method: 'POST'
+            })
+            .then(function(response) {
+                if (response.status === 401 || response.status === 403) {
+                    window.location.href = '/login';
+                    return;
+                }
+                
+                if (!response.ok) {
+                    throw new Error('Failed to refresh all inventories: HTTP ' + response.status);
+                }
+                
+                return response.json();
+            })
+            .then(function(data) {
+                if (data.success) {
+                    resolve(data);
+                } else {
+                    reject(new Error(data.error || 'Failed to refresh all inventories'));
+                }
+            })
+            .catch(reject);
+        });
+    },
+
+    /**
+     * Get application health status
+     * @returns {Promise} Promise resolving to health status
+     */
+    getHealthStatus: function() {
+        return new Promise(function(resolve, reject) {
+            fetch('/api/statements/health')
+            .then(function(response) {
+                if (!response.ok) {
+                    throw new Error('Health check failed: HTTP ' + response.status);
+                }
+                
+                return response.json();
+            })
+            .then(function(data) {
+                resolve(data);
+            })
+            .catch(reject);
         });
     }
 };

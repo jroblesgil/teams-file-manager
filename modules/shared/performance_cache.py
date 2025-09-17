@@ -1,11 +1,9 @@
-# modules/shared/performance_cache.py - FIXED VERSION
+# modules/shared/performance_cache.py - Production Version
 """
-Unified Performance Cache for STP and BBVA Systems - FIXED
+Unified Performance Cache for STP and BBVA Systems
 
 This module provides caching, async operations, and performance optimization
 for both STP and BBVA file management systems.
-
-FIXED: Flask request context issues with ThreadPoolExecutor
 """
 
 import time
@@ -26,10 +24,10 @@ class UnifiedPerformanceCache:
     def __init__(self):
         self.cache = {}
         self.cache_timeout = {
-            'file_list': 60,       # 1 minute (was 300) - faster detection of changes
-            'file_content': 1800,  # 30 minutes (keep long for actual file content)
-            'parse_status': 300,   # 5 minutes (was 600)
-            'calendar_data': 30    # 30 seconds (was 180) - very fast calendar refresh
+            'file_list': 60,       # 1 minute - faster detection of changes
+            'file_content': 1800,  # 30 minutes - keep long for actual file content
+            'parse_status': 300,   # 5 minutes
+            'calendar_data': 30    # 30 seconds - very fast calendar refresh
         }
         self.lock = threading.Lock()
         self.executor = ThreadPoolExecutor(max_workers=6)
@@ -124,7 +122,7 @@ def cached_operation(cache_type: str = 'file_list', timeout: Optional[int] = Non
     return decorator
 
 class ContextPreservingAsyncProcessor:
-    """FIXED: Async processor that preserves Flask request context"""
+    """Async processor that preserves Flask request context"""
     
     def __init__(self, max_workers: int = 4):
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
@@ -132,27 +130,27 @@ class ContextPreservingAsyncProcessor:
     def process_accounts_parallel(self, accounts_config: Dict[str, Any], 
                                 access_token: str, year: int, 
                                 file_getter_func: Callable) -> Dict[str, Any]:
-        """Process multiple accounts in parallel WITH request context"""
+        """Process multiple accounts in parallel with request context"""
         
         results = {}
         
-        # FIXED: Process sequentially if no request context or small number of accounts
+        # Process sequentially if no request context or small number of accounts
         if not has_request_context() or len(accounts_config) <= 2:
-            logger.info("Processing accounts sequentially (no request context or few accounts)")
+            logger.debug("Processing accounts sequentially (no request context or few accounts)")
             for account_key, account_info in accounts_config.items():
                 try:
                     result = self._safe_account_processing(
                         account_key, account_info, access_token, year, file_getter_func
                     )
                     results[account_key] = result
-                    logger.info(f"✅ Completed processing for account: {account_key}")
+                    logger.debug(f"Completed processing for account: {account_key}")
                 except Exception as e:
-                    logger.error(f"❌ Error processing account {account_key}: {e}")
+                    logger.error(f"Error processing account {account_key}: {e}")
                     results[account_key] = self._create_fallback_data(account_key, year)
             
             return results
         
-        # FIXED: For parallel processing, copy request context
+        # For parallel processing, copy request context
         futures = {}
         
         for account_key, account_info in accounts_config.items():
@@ -172,9 +170,9 @@ class ContextPreservingAsyncProcessor:
             try:
                 result = future.result(timeout=30)
                 results[account_key] = result
-                logger.info(f"✅ Completed processing for account: {account_key}")
+                logger.debug(f"Completed processing for account: {account_key}")
             except Exception as e:
-                logger.error(f"❌ Error processing account {account_key}: {e}")
+                logger.error(f"Error processing account {account_key}: {e}")
                 # Provide fallback data
                 results[account_key] = self._create_fallback_data(account_key, year)
         
@@ -194,7 +192,7 @@ class ContextPreservingAsyncProcessor:
     
     def _process_account_files(self, account_key: str, files: List[Dict], 
                              year: int, account_info: Any) -> Dict[str, Any]:
-        """Process files for an account into calendar format - FIXED FOR TEMPLATE COMPATIBILITY"""
+        """Process files for an account into calendar format"""
         
         months_data = {}
         
@@ -207,7 +205,7 @@ class ContextPreservingAsyncProcessor:
             pdf_file = next((f for f in month_files if f.get('extension') == 'pdf'), None)
             xlsx_file = next((f for f in month_files if f.get('extension') == 'xlsx'), None)
             
-            # BBVA FIX: Different logic for BBVA vs STP
+            # Different logic for BBVA vs STP
             if hasattr(account_info, 'get') and 'clabe' in str(account_info):
                 # This is a BBVA account (uses CLABE)
                 if pdf_file:
@@ -223,14 +221,13 @@ class ContextPreservingAsyncProcessor:
                 else:
                     status = 'missing'
 
-            # FIXED: Add transaction_count field for template compatibility
             months_data[month_key] = {
                 'pdf': pdf_file,
                 'xlsx': xlsx_file,
                 'status': status,
                 'month_name': self._get_month_name(month),
                 'parse_status': 'not_parsed',
-                'transaction_count': 0  # FIXED: Add for template compatibility (STP gets updated by JS)
+                'transaction_count': 0
             }
         
         return {
@@ -240,7 +237,7 @@ class ContextPreservingAsyncProcessor:
         }
     
     def _create_fallback_data(self, account_key: str, year: int) -> Dict[str, Any]:
-        """Create fallback data when account processing fails - FIXED"""
+        """Create fallback data when account processing fails"""
         months_data = {}
         for month in range(1, 13):
             month_key = f"{year}-{month:02d}"
@@ -250,7 +247,7 @@ class ContextPreservingAsyncProcessor:
                 'status': 'error',
                 'month_name': self._get_month_name(month),
                 'parse_status': 'error',
-                'transaction_count': 0  # FIXED: Add for template compatibility
+                'transaction_count': 0
             }
         
         return {
@@ -267,13 +264,13 @@ class ContextPreservingAsyncProcessor:
         ]
         return months[month - 1]
 
-# Global async processor - FIXED VERSION
+# Global async processor
 async_processor = ContextPreservingAsyncProcessor()
 
-# FIXED: Cached versions of common functions with proper error handling
+# Cached versions of common functions with proper error handling
 @cached_operation(cache_type='file_list', timeout=300)
 def get_stp_files_cached(account_number: str, access_token: str, year: int):
-    """Cached version of STP file retrieval - FIXED"""
+    """Cached version of STP file retrieval"""
     try:
         from modules.stp.stp_files import get_stp_files
         return get_stp_files(account_number, access_token, year)
@@ -283,7 +280,7 @@ def get_stp_files_cached(account_number: str, access_token: str, year: int):
 
 @cached_operation(cache_type='file_list', timeout=300)
 def get_bbva_files_cached(account_clabe: str, access_token: str, year: int):
-    """Cached version of BBVA file retrieval - FIXED"""
+    """Cached version of BBVA file retrieval"""
     try:
         from modules.bbva.bbva_files import get_bbva_files as get_bbva_files_module
         return get_bbva_files_module(account_clabe, access_token, year)
@@ -292,19 +289,19 @@ def get_bbva_files_cached(account_clabe: str, access_token: str, year: int):
         return []  # Return empty list instead of failing
 
 def create_stp_calendar_data_fast(access_token: str, year: int):
-    """Fast STP calendar creation with TRANSACTION COUNTS - FIXED"""
+    """Fast STP calendar creation with transaction counts"""
     try:
         from collections import OrderedDict
         
-        # FIXED: Use ordered account mapping with correct names and order
+        # Use ordered account mapping with correct names and order
         account_mapping = OrderedDict([
             ('646180559700000009', {'name': 'STP SA'}),        # First tab
             ('646180403000000004', {'name': 'STP IP - PD'}),   # Second tab  
             ('646990403000000003', {'name': 'STP IP - PI'})    # Third tab
         ])
         
-        # PERFORMANCE FIX: Load tracking data AND record counts for all STP accounts
-        logger.info("Loading STP tracking data and record counts for complete calendar creation...")
+        # Load tracking data AND record counts for all STP accounts
+        logger.debug("Loading STP tracking data and record counts for complete calendar creation...")
         start_time = time.time()
         
         # Load tracking data for parse status
@@ -316,9 +313,9 @@ def create_stp_calendar_data_fast(access_token: str, year: int):
         record_counts = get_monthly_record_counts(access_token, year)
         
         load_time = time.time() - start_time
-        logger.info(f"STP data loaded in {load_time:.2f}s - tracking: {len(tracking_data)} accounts, counts: {len(record_counts)} accounts")
+        logger.debug(f"STP data loaded in {load_time:.2f}s - tracking: {len(tracking_data)} accounts, counts: {len(record_counts)} accounts")
         
-        # COMPLETE DATA PROCESSING: Build calendar with all data
+        # Build calendar with all data
         results = OrderedDict()
         
         for account_key, account_info in account_mapping.items():
@@ -330,7 +327,7 @@ def create_stp_calendar_data_fast(access_token: str, year: int):
                 account_tracking = tracking_data.get(account_key, {})
                 account_counts = record_counts.get(account_key, {})
                 
-                # Create month structure with COMPLETE DATA INTEGRATION
+                # Create month structure with complete data integration
                 month_names = ['January', 'February', 'March', 'April', 'May', 'June',
                               'July', 'August', 'September', 'October', 'November', 'December']
                 
@@ -351,7 +348,7 @@ def create_stp_calendar_data_fast(access_token: str, year: int):
                     else:
                         status = 'missing'
                     
-                    # COMPLETE INTEGRATION: Get parse status AND transaction count
+                    # Get parse status AND transaction count
                     parse_status = 'not_parsed'
                     transaction_count = account_counts.get(month_key, 0)
                     
@@ -374,10 +371,10 @@ def create_stp_calendar_data_fast(access_token: str, year: int):
                         'status': status,
                         'month_name': month_name,
                         'parse_status': parse_status,
-                        'transaction_count': transaction_count  # NOW INCLUDES ACTUAL COUNT
+                        'transaction_count': transaction_count
                     }
                 
-                # TEMPLATE FIX: Match the expected structure with complete data
+                # Match the expected structure with complete data
                 results[account_key] = {
                     'account_info': account_info,
                     'account_type': account_info['name'],
@@ -388,10 +385,10 @@ def create_stp_calendar_data_fast(access_token: str, year: int):
                     'parsed_months': sum(1 for month in months_data.values() if month['parse_status'] == 'parsed')
                 }
                 
-                logger.info(f"✅ Complete STP data for {account_key} - {account_info['name']}: {len(files)} files, {results[account_key]['total_transactions']} transactions")
+                logger.debug(f"Complete STP data for {account_key} - {account_info['name']}: {len(files)} files, {results[account_key]['total_transactions']} transactions")
                 
             except Exception as e:
-                logger.error(f"❌ Error processing STP account {account_key}: {e}")
+                logger.error(f"Error processing STP account {account_key}: {e}")
                 # Create fallback data with proper structure
                 results[account_key] = {
                     'account_info': account_info,
@@ -411,7 +408,7 @@ def create_stp_calendar_data_fast(access_token: str, year: int):
                 }
         
         total_time = time.time() - start_time
-        logger.info(f"✅ Complete STP calendar created in {total_time:.2f}s for {len(results)} accounts")
+        logger.debug(f"Complete STP calendar created in {total_time:.2f}s for {len(results)} accounts")
         return results
         
     except Exception as e:
@@ -419,7 +416,7 @@ def create_stp_calendar_data_fast(access_token: str, year: int):
         return {}
 
 def create_bbva_calendar_data_fast(access_token: str, year: int):
-    """Complete server-side BBVA calendar with parse status AND transaction counts - SINGLE SOURCE OF TRUTH"""
+    """Complete server-side BBVA calendar with parse status and transaction counts"""
     try:
         from collections import OrderedDict
         
@@ -433,17 +430,17 @@ def create_bbva_calendar_data_fast(access_token: str, year: int):
             ('012180001232011635', {'name': 'BBVA IP Clientes', 'clabe': '012180001232011635', 'account_key': 'bbva_ip_clientes'})
         ])
         
-        # PERFORMANCE FIX: Load tracking data ONCE for all accounts
+        # Load tracking data for all accounts
         from modules.bbva.bbva_database import get_bbva_parse_tracking_data
-        logger.info("Loading BBVA tracking data for complete calendar creation...")
+        logger.debug("Loading BBVA tracking data for complete calendar creation...")
         start_time = time.time()
         
         tracking_data = get_bbva_parse_tracking_data(access_token)
         
         load_time = time.time() - start_time
-        logger.info(f"Tracking data loaded in {load_time:.2f}s for {len(tracking_data)} accounts")
+        logger.debug(f"Tracking data loaded in {load_time:.2f}s for {len(tracking_data)} accounts")
         
-        # SINGLE SOURCE PROCESSING: Build complete calendar with all data
+        # Build complete calendar with all data
         results = OrderedDict()
         
         for clabe, account_info in ordered_bbva_accounts.items():
@@ -454,7 +451,7 @@ def create_bbva_calendar_data_fast(access_token: str, year: int):
                 # Get tracking data for this specific account
                 account_tracking = tracking_data.get(clabe, {})
                 
-                # Create month structure with COMPLETE DATA INTEGRATION
+                # Create month structure with complete data integration
                 month_names = ['January', 'February', 'March', 'April', 'May', 'June',
                               'July', 'August', 'September', 'October', 'November', 'December']
                 
@@ -466,7 +463,7 @@ def create_bbva_calendar_data_fast(access_token: str, year: int):
                     # Determine basic status
                     status = 'complete' if pdf_file else 'missing'
                     
-                    # COMPLETE INTEGRATION: Get both parse status AND transaction count
+                    # Get both parse status AND transaction count
                     parse_status = 'not_parsed'
                     transaction_count = 0
                     
@@ -487,12 +484,11 @@ def create_bbva_calendar_data_fast(access_token: str, year: int):
                         'status': status,
                         'month_name': month_name,
                         'parse_status': parse_status,
-                        'transaction_count': transaction_count,  # INCLUDED IN SERVER DATA
-                        # Add data structure that client expects
+                        'transaction_count': transaction_count,
                         'record_count': transaction_count  # Alternative field name for compatibility
                     }
                 
-                # TEMPLATE FIX: Match the expected structure with complete data
+                # Match the expected structure with complete data
                 results[clabe] = {
                     'account_info': account_info,
                     'account_type': account_info['name'],
@@ -503,10 +499,10 @@ def create_bbva_calendar_data_fast(access_token: str, year: int):
                     'parsed_months': sum(1 for month in months_data.values() if month['parse_status'] == 'parsed')
                 }
                 
-                logger.info(f"✅ Complete data for {clabe} - {account_info['name']}: {len(files)} files, {results[clabe]['total_transactions']} transactions")
+                logger.debug(f"Complete data for {clabe} - {account_info['name']}: {len(files)} files, {results[clabe]['total_transactions']} transactions")
                 
             except Exception as e:
-                logger.error(f"❌ Error processing BBVA account {clabe}: {e}")
+                logger.error(f"Error processing BBVA account {clabe}: {e}")
                 # Create fallback data with proper structure
                 results[clabe] = {
                     'account_info': account_info,
@@ -527,7 +523,7 @@ def create_bbva_calendar_data_fast(access_token: str, year: int):
                 }
         
         total_time = time.time() - start_time
-        logger.info(f"✅ Complete BBVA calendar created in {total_time:.2f}s for {len(results)} accounts")
+        logger.debug(f"Complete BBVA calendar created in {total_time:.2f}s for {len(results)} accounts")
         return results
         
     except Exception as e:
@@ -535,23 +531,23 @@ def create_bbva_calendar_data_fast(access_token: str, year: int):
         return {}
 
 def warm_cache_for_user(access_token: str, year: int):
-    """Warm cache with commonly requested data - FIXED"""
-    logger.info(f"Warming cache for year {year}")
+    """Warm cache with commonly requested data"""
+    logger.debug(f"Warming cache for year {year}")
     
     try:
         # Warm STP cache
         stp_data = create_stp_calendar_data_fast(access_token, year)
         if stp_data:
-            logger.info("✅ STP cache warmed successfully")
+            logger.debug("STP cache warmed successfully")
         else:
-            logger.warning("⚠️ STP cache warming returned empty data")
+            logger.warning("STP cache warming returned empty data")
         
         # Warm BBVA cache  
         bbva_data = create_bbva_calendar_data_fast(access_token, year)
         if bbva_data:
-            logger.info("✅ BBVA cache warmed successfully")
+            logger.debug("BBVA cache warmed successfully")
         else:
-            logger.warning("⚠️ BBVA cache warming returned empty data")
+            logger.warning("BBVA cache warming returned empty data")
         
     except Exception as e:
         logger.error(f"Error warming cache: {e}")
